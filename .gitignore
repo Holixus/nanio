@@ -1,0 +1,9 @@
+/Makefile
+/CMakeCache.txt
+/cmake_install.cmake
+/CMakeFiles/
+/tests
+/*.a
+/*.so
+/install_manifest.txt
+/nano/json.h
