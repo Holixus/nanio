@@ -10,7 +10,10 @@
 #include <sys/types.h>
 #include <arpa/inet.h>
 
+#include "nano/io.h"
 #include "nano/io_ipv4.h"
+
+#include "io_internals.h"
 
 /* ------------------------------------------------------------------------ */
 static char *bput(char *p, unsigned int byte)
@@ -60,20 +63,10 @@ int ipv4_itostr(char *p, unsigned int ip)
 	return p - begin;
 }
 
-enum { IP_BUF_SIZE = 40 };
-
-/* ------------------------------------------------------------------------ */
-static char *_getIpBuf()
-{
-	static char buf[8][IP_BUF_SIZE];
-	static int index = 0;
-	return buf[index++ & 7];
-}
-
 /* ------------------------------------------------------------------------ */
 char const *ipv4_ntoa(unsigned char const *ip)
 {
-	char *buf = _getIpBuf();
+	char *buf = _getTmpStr();
 	ipv4_ntostr(buf, ip);
 	return buf;
 }
@@ -81,7 +74,7 @@ char const *ipv4_ntoa(unsigned char const *ip)
 /* ------------------------------------------------------------------------ */
 char const *ipv4_itoa(unsigned int num)
 {
-	char *buf = _getIpBuf();
+	char *buf = _getTmpStr();
 	ipv4_itostr(buf, num);
 	return buf;
 }

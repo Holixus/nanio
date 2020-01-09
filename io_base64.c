@@ -1,5 +1,8 @@
 #include <stddef.h>
 
+#include "nano/io.h"
+#include "nano/io_base64.h"
+
 /* -------------------------------------------------------------------------- */
 static inline unsigned int _b64_demap(char i) {
 	if (i < 43 || 122 < i)

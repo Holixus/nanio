@@ -12,6 +12,7 @@
 #include <sys/time.h>
 #include <sys/types.h>
 
+#include "nano/io.h"
 #include "nano/io_timers.h"
 
 

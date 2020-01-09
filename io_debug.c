@@ -1,13 +1,13 @@
+#include <stdio.h>
+#include <stdlib.h>
 #include <stdarg.h>
+#include <unistd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
 
+#include "nano/io.h"
 #include "nano/io_debug.h"
-
-
-/* -------------------------------------------------------------------------- */
-void trace(char const *fmt, ...) __attribute__ ((format (printf, 1, 2)));
 
 
 static char const io_trace_file[] = "/tmp/io.log";

@@ -16,6 +16,7 @@
 
 #include <netinet/ip.h>
 
+#include "nano/io.h"
 #include "nano/io_signals.h"
 
 

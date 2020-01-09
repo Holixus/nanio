@@ -12,7 +12,10 @@
 
 #include <ctype.h>
 
+#include "nano/io.h"
 #include "nano/io_hexmac.h"
+
+#include "io_internals.h"
 
 
 /* ------------------------------------------------------------------------ */
@@ -41,14 +44,14 @@ int hex_ntostr(char *str, size_t ssize, unsigned char const *bin, size_t bsize)
 /* ------------------------------------------------------------------------ */
 char const *hex_ntoa(unsigned char const *bin, size_t size)
 {
-	char *buf = _getIpBuf();
+	char *buf = _getTmpStr();
 
-	if (size * 2 - 2 > IP_BUF_SIZE) {
-		char *to = buf + hex_ntostr(buf, IP_BUF_SIZE, bin, IP_BUF_SIZE / 2 - 2);
+	if (size * 2 - 2 > TMP_STR_SIZE) {
+		char *to = buf + hex_ntostr(buf, TMP_STR_SIZE, bin, TMP_STR_SIZE / 2 - 2);
 		to[0] = to[1] = to[2] = '.';
 		to[3] = 0;
 	} else
-		hex_ntostr(buf, IP_BUF_SIZE, bin, size);
+		hex_ntostr(buf, TMP_STR_SIZE, bin, size);
 
 	return buf;
 }
@@ -72,23 +75,9 @@ int mac_ntostr(char *str, unsigned char const *mac)
 /* ------------------------------------------------------------------------ */
 char const *mac_ntoa(unsigned char const *mac)
 {
-	char *buf = _getIpBuf();
+	char *buf = _getTmpStr();
 	mac_ntostr(buf, mac);
 	return buf;
-}
-
-/* ------------------------------------------------------------------------ */
-// return 10f311c6e261
-const char *mac_ntoa_2(unsigned char const *mac)
-{
-	return strf("%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}
-
-/* ------------------------------------------------------------------------ */
-// return 10:f3:11:c6:e2:61
-const char *mac_ntoa_3(unsigned char const *mac)
-{
-	return strf("%02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
 }
 
 /* ------------------------------------------------------------------------ */

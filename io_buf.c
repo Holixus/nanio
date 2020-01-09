@@ -16,6 +16,7 @@
 
 #include <netinet/ip.h>
 
+#include "nano/io.h"
 #include "nano/io_buf.h"
 
 
@@ -27,6 +28,7 @@ io_seg_t *io_seg_new()
 	s->next = 0;
 	return s;
 }
+
 
 /* ------------------------------------------------------------------------ */
 void io_buf_init(io_buf_t *b)
@@ -60,6 +62,30 @@ void io_buf_free(io_buf_t *b)
 }
 
 /* ------------------------------------------------------------------------ */
+static io_seg_t *io_buf_get_last_seg(io_buf_t *b)
+{
+	io_seg_t *s = b->last;
+	if (!s)
+		b->first = b->last = s = io_seg_new();
+	return s;
+}
+
+/* ------------------------------------------------------------------------ */
+static size_t io_buf_get_seg_to_write(io_buf_t *b, io_seg_t **ps)
+{
+	io_seg_t *s = *ps;
+	size_t to_recv = sizeof s->data - (unsigned)(s->end - s->begin);
+	if (!to_recv) {
+		s = io_seg_new();
+		b->last->next = s;
+		b->last = s;
+		to_recv = (signed)sizeof s->data - (s->end - s->begin);
+	}
+	*ps = s;
+	return to_recv;
+}
+
+/* ------------------------------------------------------------------------ */
 int io_buf_send(io_buf_t *b, int sock)
 {
 	ssize_t total = 0;
@@ -68,14 +94,16 @@ int io_buf_send(io_buf_t *b, int sock)
 	while ((s = b->first)) {
 		ssize_t to_send = (int)(s->end - s->begin);
 		if (to_send) {
-			ssize_t sent = send(sock, s->begin, (size_t)to_send, 0);
+			ssize_t sent;
+			do {
+				sent = send(sock, s->begin, (size_t)to_send, 0);
+			} while (sent < 0 && errno == EINTR);
 			if (sent < 0)
 				return -1;
 			s->begin += sent;
-			if (sent < to_send) {
-				return (int)(total + sent);
-			}
 			total += sent;
+			if (sent < to_send)
+				return (int)total;
 		}
 		if (!(b->first = s->next))
 			b->last = NULL;
@@ -90,20 +118,14 @@ int io_buf_recv(io_buf_t *b, int sock)
 {
 	ssize_t total = 0;
 
-	io_seg_t *s = b->last;
-	if (!s)
-		b->first = b->last = s = io_seg_new();
+	io_seg_t *s = io_buf_get_last_seg(b);
 
 _recv_more:;
-	ssize_t to_recv = (signed)sizeof s->data - (s->end - s->begin);
-	if (!to_recv) {
-		s = io_seg_new();
-		b->last->next = s;
-		b->last = s;
-		to_recv = (signed)sizeof s->data - (s->end - s->begin);
-	}
-
-	ssize_t len = recv(sock, s->end, (size_t)to_recv, 0);
+	size_t to_recv = io_buf_get_seg_to_write(b, &s);
+	ssize_t len;
+	do {
+		len = recv(sock, s->end, to_recv, 0);
+	} while (len < 0 && errno == EINTR);
 	if (len < 0)
 		return -1;
 
@@ -113,5 +135,59 @@ _recv_more:;
 		goto _recv_more;
 
 	return (int)total;
+}
+
+/* ------------------------------------------------------------------------ */
+ssize_t io_buf_write(io_buf_t *b, char const *data, size_t size)
+{
+	if (!size)
+		return 0;
+
+	size_t tail = size;
+	ssize_t total = 0;
+
+	io_seg_t *s = io_buf_get_last_seg(b);
+
+	do {
+		size_t to_recv = io_buf_get_seg_to_write(b, &s);
+
+		size_t len = to_recv > tail  ? tail : to_recv;
+		memcpy(s->end, data, len);
+		tail -= len;
+
+		s->end += len;
+		total += len;
+	} while (tail);
+
+	return total;
+}
+
+/* ------------------------------------------------------------------------ */
+ssize_t io_buf_read(io_buf_t *b, char *data, size_t size)
+{
+	size_t tail = size;
+	ssize_t total = 0;
+
+	io_seg_t *s;
+	while (tail && (s = b->first)) {
+		ssize_t to_send = (int)(s->end - s->begin);
+		if (to_send) {
+			size_t sent = to_send > tail ? tail : to_send;
+			memcpy(data, s->begin, sent);
+			data += sent;
+			tail -= sent;
+
+			s->begin += sent;
+			total += sent;
+
+			if (sent < to_send)
+				return total;
+		}
+		if (!(b->first = s->next))
+			b->last = NULL;
+		free(s);
+	}
+
+	return total;
 }
 

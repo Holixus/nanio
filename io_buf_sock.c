@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
@@ -16,6 +17,7 @@
 
 #include <netinet/ip.h>
 
+#include "nano/io.h"
 #include "nano/io_socks.h"
 #include "nano/io_buf.h"
 #include "nano/io_buf_socks.h"

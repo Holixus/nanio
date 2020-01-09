@@ -1,18 +1,21 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
 
-/* -------------------------------------------------------------------------- */
-static char *_getIpV6Buf()
-{
-	static char buf[8][INET6_ADDRSTRLEN + 8];
-	static int index = 0;
-	return buf[index++ & 7];
-}
+#include <string.h>
 
-/*static uint8_t *_getIpV6AddrBuf()
-{
-	static uint8 buf[8][16];
-	static int index = 0;
-	return &buf[index++ & 7];
-}*/
+#include <sys/types.h>
+#include <arpa/inet.h>
+
+#include <ctype.h>
+
+#include "nano/io.h"
+#include "nano/io_ipv6.h"
+
+#include "io_internals.h"
 
 
 /* -------------------------------------------------------------------------- */
@@ -26,7 +29,7 @@ int ipv6_ntostr(char *s, uint8_t const *n)
 /* -------------------------------------------------------------------------- */
 char const *ipv6_ntoa(uint8_t const *n)
 {
-	char *s = _getIpV6Buf();
+	char *s = _getTmpStr();
 	inet_ntop(AF_INET6, n, s, INET6_ADDRSTRLEN);
 	return s;
 }
@@ -34,7 +37,7 @@ char const *ipv6_ntoa(uint8_t const *n)
 /* -------------------------------------------------------------------------- */
 char const *ipv6_nptoa(uint8_t const *n, int prefix_len)
 {
-	char *s = _getIpV6Buf();
+	char *s = _getTmpStr();
 	inet_ntop(AF_INET6, n, s, INET6_ADDRSTRLEN);
 	sprintf(s + strlen(s), "/%d", prefix_len);
 	return s;
@@ -101,7 +104,7 @@ char const *ipv6_htoa(uint16_t const ip[8])
 {
 	uint8_t n[16];
 	ipv6_hton(n, ip);
-	char *s = _getIpV6Buf();
+	char *s = _getTmpStr();
 	inet_ntop(AF_INET6, n, s, INET6_ADDRSTRLEN);
 	return s;
 }

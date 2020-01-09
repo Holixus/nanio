@@ -1,14 +1,12 @@
 #ifndef NANO_BUF_SOCKS_H
 #define NANO_BUF_SOCKS_H
 
-#include "nano/io_socks.h"
-
 /* -------------------------------------------------------------------------- */
 typedef
 struct io_buf_sock {
 	io_sock_t sock;
 	io_buf_t out;
-	io_sock_poll_handler_t *pollin;
+	io_sock_poll_handler_t pollin;
 } io_buf_sock_t;
 
 
