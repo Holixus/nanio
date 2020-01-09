@@ -6,4 +6,4 @@
 /*.a
 /*.so
 /install_manifest.txt
-/nano/json.h
+/nano/io.h

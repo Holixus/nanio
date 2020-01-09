@@ -1,3 +1,11 @@
+#ifndef NANO_IO_H
+#define NANO_IO_H
+
+/* ------------------------------------------------------------------------ */
+#cmakedefine IPV6_SOCKET
+#cmakedefine UNIX_SOCKET
+#cmakedefine IPV4_SOCKET
+
 /* -------------------------------------------------------------------------- */
 
 typedef void (void_fn_t)();
@@ -9,3 +17,4 @@ extern char const *io_prog_name;
 
 void start(int argc, char *argv[]);
 
+#endif
