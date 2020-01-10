@@ -24,6 +24,25 @@ static io_sock_t *io_socks;
 static size_t io_socks_length;
 
 /* -------------------------------------------------------------------------- */
+static char *pollevtoa(int ev)
+{
+	static char s[4][64];
+	static int i = 0;
+	char *b = s[++i & 3], *p = b;
+	if (ev & POLLIN)
+		p += sprintf(p, "|POLLIN");
+	if (ev & POLLOUT)
+		p += sprintf(p, "|POLLOUT");
+	if (ev & POLLERR)
+		p += sprintf(p, "|POLLERR");
+	if (ev & POLLHUP)
+		p += sprintf(p, "|POLLHUP");
+	if ((ev &= ~(POLLIN|POLLOUT|POLLERR|POLLHUP)))
+		p += sprintf(p, "|0x%02x", ev);
+	return b + 1;
+}
+
+/* -------------------------------------------------------------------------- */
 void io_sock_init(io_sock_t *self, int fd, int events, io_sock_ops_t const *ops)
 {
 	self->fd = fd;
@@ -89,7 +108,7 @@ int io_socks_poll(int timeout)
 		return ret;
 
 	for (size_t i = 0; i < n; ++i)
-		if (fds[i].revents & socks[i]->events)
+		if (fds[i].revents/* & socks[i]->events*/)
 			socks[i]->ops->event(socks[i], fds[i].revents);
 
 	return (int)n;
