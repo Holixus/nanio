@@ -18,25 +18,25 @@
 #include <netinet/ip.h>
 
 #include "nano/io.h"
-#include "nano/io_socks.h"
+#include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_socks.h"
+#include "nano/io_buf_d.h"
 
 
 /* -------------------------------------------------------------------------- */
-void io_buf_sock_free(io_sock_t *sock)
+void io_buf_d_free(io_d_t *d)
 {
-	io_buf_sock_t *p = (io_buf_sock_t *)sock;
-	io_buf_free(&p->out);
+	io_buf_d_t *b = (io_buf_d_t *)d;
+	io_buf_free(&b->out);
 }
 
 /* -------------------------------------------------------------------------- */
-int io_buf_sock_write(io_sock_t *sock, char const *data, size_t size)
+int io_buf_d_write(io_d_t *d, char const *data, size_t size)
 {
-	io_buf_sock_t *p = (io_buf_sock_t *)sock;
+	io_buf_d_t *b = (io_buf_d_t *)d;
 
-	if (io_buf_is_empty(&p->out)) {
-		ssize_t sent = send(sock->fd, data, size, 0);
+	if (io_buf_is_empty(&b->out)) {
+		ssize_t sent = send(d->fd, data, size, 0);
 		if (sent < 0)
 			return -1;
 		if (sent == size)
@@ -44,55 +44,55 @@ int io_buf_sock_write(io_sock_t *sock, char const *data, size_t size)
 		data += sent;
 		size -= sent;
 	}
-	return io_buf_write(&p->out, data, size);
+	return io_buf_write(&b->out, data, size);
 }
 
 /* -------------------------------------------------------------------------- */
-int io_buf_sock_vwritef(io_sock_t *sock, char const *fmt, va_list ap)
+int io_buf_d_vwritef(io_d_t *d, char const *fmt, va_list ap)
 {
 	char msg[256];
 	size_t len = (size_t)vsnprintf(msg, sizeof msg, fmt, ap);
-	return io_buf_sock_write(sock, msg, len);
+	return io_buf_d_write(d, msg, len);
 }
 
 /* -------------------------------------------------------------------------- */
-int io_buf_sock_writef(io_sock_t *sock, char const *fmt, ...)
+int io_buf_d_writef(io_d_t *d, char const *fmt, ...)
 {
 	va_list ap;
 	va_start(ap, fmt);
-	int r = io_buf_sock_vwritef(sock, fmt, ap);
+	int r = io_buf_d_vwritef(d, fmt, ap);
 	va_end(ap);
 	return r;
 }
 
 /* -------------------------------------------------------------------------- */
-void io_buf_sock_event_handler(io_sock_t *sock, int events)
+void io_buf_d_event_handler(io_d_t *d, int events)
 {
-	io_buf_sock_t *p = (io_buf_sock_t *)sock;
+	io_buf_d_t *b = (io_buf_d_t *)d;
 	if (events & POLLOUT) {
-		if (io_buf_send(&p->out, sock->fd) < 0) {
+		if (io_buf_send(&b->out, d->fd) < 0) {
 			if (errno == ECONNRESET || errno == ENOTCONN || errno == EPIPE)
-				io_sock_free(sock);
+				io_d_free(d);
 		}
 	}
-	if (events & POLLIN && p->pollin)
-		p->pollin(sock);
+	if (events & POLLIN && b->pollin)
+		b->pollin(d);
 }
 
 /* -------------------------------------------------------------------------- */
-static const io_sock_ops_t io_buf_sock_ops = {
-	.free = io_buf_sock_free,
+static const io_d_ops_t io_buf_d_ops = {
+	.free = io_buf_d_free,
 	.idle = NULL,
-	.event = io_buf_sock_event_handler
+	.event = io_buf_d_event_handler
 };
 
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_buf_sock_create(io_buf_sock_t *t, int sock, io_sock_ops_t const *ops)
+io_buf_d_t *io_buf_d_create(io_buf_d_t *b, int fd, io_d_ops_t const *ops)
 {
-	io_buf_init(&t->out);
+	io_buf_init(&b->out);
 
-	io_sock_init(&t->sock, sock, POLLIN|POLLOUT, ops ?: &io_buf_sock_ops);
-	return t;
+	io_d_init(&b->d, fd, POLLIN|POLLOUT, ops ?: &io_buf_d_ops);
+	return b;
 }
 

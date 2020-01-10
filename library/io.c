@@ -17,7 +17,7 @@
 #include <netinet/ip.h>
 
 #include "nano/io_timers.h"
-#include "nano/io_socks.h"
+#include "nano/io_ds.h"
 #include "nano/io_signals.h"
 #include "nano/io_debug.h"
 
@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
 	openlog(io_prog_name, LOG_PERROR | LOG_PID, LOG_USER);
 
 	io_timers_init();
-	io_socks_init();
+	io_ds_init();
 
 	atexit(io_free);
 
@@ -71,7 +71,7 @@ int main(int argc, char *argv[])
 
 	int ret;
 	do {
-		ret = io_socks_poll(io_get_timeout());
+		ret = io_ds_poll(io_get_timeout());
 	} while (ret > 0 || (ret < 0 && errno == EINTR));
 
 	return 0;

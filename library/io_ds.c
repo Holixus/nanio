@@ -17,11 +17,11 @@
 #include <netinet/ip.h>
 
 #include "nano/io.h"
-#include "nano/io_socks.h"
+#include "nano/io_ds.h"
 
 /* -------------------------------------------------------------------------- */
-static io_sock_t *io_socks;
-static size_t io_socks_length;
+static io_d_t *io_ds;
+static size_t io_ds_length;
 
 /* -------------------------------------------------------------------------- */
 static char *pollevtoa(int ev)
@@ -43,20 +43,20 @@ static char *pollevtoa(int ev)
 }
 
 /* -------------------------------------------------------------------------- */
-void io_sock_init(io_sock_t *self, int fd, int events, io_sock_ops_t const *ops)
+void io_d_init(io_d_t *self, int fd, int events, io_d_ops_t const *ops)
 {
 	self->fd = fd;
 	self->events = events;
 	self->ops = ops;
-	self->next = io_socks;
-	io_socks = self;
-	io_socks_length += 1;
+	self->next = io_ds;
+	io_ds = self;
+	io_ds_length += 1;
 }
 
 /* -------------------------------------------------------------------------- */
-void io_sock_free(io_sock_t *self)
+void io_d_free(io_d_t *self)
 {
-	for (io_sock_t **s = &io_socks; s; s = &s[0]->next)
+	for (io_d_t **s = &io_ds; s; s = &s[0]->next)
 		if (*s == self) {
 			*s = self->next;
 			break;
@@ -65,37 +65,37 @@ void io_sock_free(io_sock_t *self)
 		self->ops->free(self);
 	close(self->fd);
 	free(self);
-	io_socks_length -= 1;
+	io_ds_length -= 1;
 }
 
 /* -------------------------------------------------------------------------- */
-void io_socks_init()
+void io_ds_init()
 {
-	io_socks = NULL;
+	io_ds = NULL;
 }
 
 /* -------------------------------------------------------------------------- */
-void io_socks_free()
+void io_ds_free()
 {
-	while (io_socks)
-		io_sock_free(io_socks);
+	while (io_ds)
+		io_d_free(io_ds);
 }
 
 /* -------------------------------------------------------------------------- */
-int io_socks_poll(int timeout)
+int io_ds_poll(int timeout)
 {
-	size_t len = io_socks_length;
+	size_t len = io_ds_length;
 	struct pollfd fds[len];
-	io_sock_t *socks[len];
+	io_d_t *ds[len];
 
 	size_t n = 0;
-	for (io_sock_t *s = io_socks; s; s = s->next) {
-		if (s->ops->idle)
-			s->ops->idle(s);
-		if (s->events) {
-			socks[n] = s;
-			fds[n].fd = s->fd;
-			fds[n].events = (short)s->events;
+	for (io_d_t *d = io_ds; d; d = d->next) {
+		if (d->ops->idle)
+			d->ops->idle(d);
+		if (d->events) {
+			ds[n] = d;
+			fds[n].fd = d->fd;
+			fds[n].events = (short)d->events;
 			++n;
 		}
 	}
@@ -108,8 +108,8 @@ int io_socks_poll(int timeout)
 		return ret;
 
 	for (size_t i = 0; i < n; ++i)
-		if (fds[i].revents/* & socks[i]->events*/)
-			socks[i]->ops->event(socks[i], fds[i].revents);
+		if (fds[i].revents/* & ds[i]->events*/)
+			ds[i]->ops->event(ds[i], fds[i].revents);
 
 	return (int)n;
 }
