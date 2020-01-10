@@ -28,7 +28,6 @@ IF(BUILD_TESTS)
 ENDIF(BUILD_TESTS)
 
 FILE(GLOB LIB_SOURCES io_*.c)
-FILE(GLOB LIB_HEADERS nano/io_*.h)
 
 ADD_LIBRARY(${static_library_target} STATIC ${LIB_SOURCES})
 
@@ -37,19 +36,22 @@ IF(BUILD_SHARED_LIBRARY)
 	SET_TARGET_PROPERTIES(${shared_library_target} PROPERTIES PUBLIC_HEADER ${LIB_HEADERS} nano/io.h)
 ENDIF(BUILD_SHARED_LIBRARY)
 
-IF(HOST_DEBUG)
-	ADD_DEFINITIONS(-O0 -g3)
-ELSE()
-	ADD_DEFINITIONS(-Os -Werror -ffast-math -fmerge-all-constants -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables)
-	IF(BUILD_TESTS)
-		SET_TARGET_PROPERTIES(tests PROPERTIES COMPILE_FLAGS -fvisibility=hidden)
-		SET_TARGET_PROPERTIES(tests PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
-	ENDIF(BUILD_TESTS)
-	SET_TARGET_PROPERTIES(${static_library_target} PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
-	IF(BUILD_SHARED_LIBRARY)
-		SET_TARGET_PROPERTIES(${shared_library_target} PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
-	ENDIF()
+
+SET(CMAKE_C_FLAGS_RELEASE "-Os -Werror -ffast-math -fmerge-all-constants -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables")
+SET(CMAKE_C_FLAGS_DEBUG   "-O0 -g3")
+
+
+IF(BUILD_TESTS)
+	SET_TARGET_PROPERTIES(tests PROPERTIES COMPILE_FLAGS -fvisibility=hidden)
+	SET_TARGET_PROPERTIES(tests PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
+ENDIF(BUILD_TESTS)
+
+SET_TARGET_PROPERTIES(${static_library_target} PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
+
+IF(BUILD_SHARED_LIBRARY)
+	SET_TARGET_PROPERTIES(${shared_library_target} PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
 ENDIF()
+
 
 IF(BUILD_TESTS)
 	INSTALL(TARGETS tests
@@ -70,6 +72,5 @@ IF(BUILD_SHARED_LIBRARY)
 		ARCHIVE DESTINATION lib
 		LIBRARY DESTINATION lib
 		RUNTIME DESTINATION bin
-		PUBLIC_HEADER DESTINATION include/nano
 	)
 ENDIF()
