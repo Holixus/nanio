@@ -44,6 +44,8 @@ int io_buf_d_write(io_d_t *d, char const *data, size_t size)
 		data += sent;
 		size -= sent;
 	}
+	if (size)
+		d->events |= POLLOUT;
 	return io_buf_write(&b->out, data, size);
 }
 
@@ -73,7 +75,9 @@ void io_buf_d_event_handler(io_d_t *d, int events)
 		if (io_buf_send(&b->out, d->fd) < 0) {
 			if (errno == ECONNRESET || errno == ENOTCONN || errno == EPIPE)
 				io_d_free(d);
-		}
+		} else
+			if (io_buf_is_empty(&b->out))
+				d->events &= ~POLLOUT;
 	}
 	if (events & POLLIN && b->pollin)
 		b->pollin(d);
