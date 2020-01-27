@@ -40,7 +40,7 @@ union _sockaddr {
 
 
 /* -------------------------------------------------------------------------- */
-static char const *hostoa(io_sock_addr_t const *sc)
+char const *io_sock_hostoa(io_sock_addr_t const *sc)
 {
 	switch (sc->family) {
 	case AF_INET:
@@ -130,8 +130,14 @@ static int _io_sock_listen(io_sock_listen_conf_t *conf)
 			return -1;
 		}
 
+	int on;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
+		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s:%d' (%m)", io_sock_hostoa(&conf->sock), conf->sock.port);
+		exit(1);
+	}
+
 	if (bind(sock, &sa.sa, sa_size) < 0 || listen(sock, conf->queue_size) < 0) {
-		syslog(LOG_ERR, "fail to bind listen socket to '%s:%d' (%m)", hostoa(&conf->sock), conf->sock.port);
+		syslog(LOG_ERR, "fail to bind listen socket to '%s:%d' (%m)", io_sock_hostoa(&conf->sock), conf->sock.port);
 		close(sock);
 		return -1;
 	}
@@ -171,7 +177,7 @@ static int _io_sock_connect(io_sock_addr_t *conf)
 
 	int sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	if (connect(sock, &sa.sa, sa_size) < 0 && errno != EINPROGRESS) {
-		syslog(LOG_ERR, "fail to connect to %s:%d (%m)", hostoa(conf), conf->port);
+		syslog(LOG_ERR, "fail to connect to %s:%d (%m)", io_sock_hostoa(conf), conf->port);
 		close(sock);
 		return -1;
 	}
@@ -181,14 +187,10 @@ static int _io_sock_connect(io_sock_addr_t *conf)
 
 
 /* -------------------------------------------------------------------------- */
-static void io_sock_listen_event_handler(io_d_t *sock, int events)
+static void io_sock_listen_event_handler(io_d_t *iod, int events)
 {
-	io_sock_listen_t *p = (io_sock_listen_t *)sock;
-
-	io_sock_addr_t sc;
-	int sd = _io_sock_accept(sock, &sc);
-	if (sd >= 0)
-		p->accept_handler(p, sd, &sc);
+	io_sock_listen_t *p = (io_sock_listen_t *)iod;
+	p->accept_handler(p);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -199,7 +201,7 @@ static const io_d_ops_t io_sock_listen_ops = {
 };
 
 /* -------------------------------------------------------------------------- */
-io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, sock_accept_handler_t *handler)
+io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, io_sock_accept_handler_t *handler)
 {
 	int sock = _io_sock_listen(conf);
 	if (sock < 0)
@@ -210,57 +212,52 @@ io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, sock_accept
 	self->conf = conf->sock;
 	self->accept_handler = handler;
 
-	io_d_init(&self->sock, sock, POLLIN, &io_sock_listen_ops);
+	io_d_init(&self->d, sock, POLLIN, &io_sock_listen_ops);
 	return self;
 }
 
 
-
-
 /* -------------------------------------------------------------------------- */
-void io_sock_free(io_d_t *sock)
-{
-	io_buf_d_free(sock);
-}
-
-/* -------------------------------------------------------------------------- */
-static void io_sock_event_handler(io_d_t *sock, int events)
+static void io_sock_event_handler(io_d_t *iod, int events)
 {
 	if (events & POLLOUT)
-		io_buf_d_event_handler(sock, events);
+		io_buf_d_event_handler(iod, events);
 
 	if (events & POLLIN) {
-		io_buf_sock_t *s = (io_buf_sock_t *)sock;
+		io_buf_sock_t *s = (io_buf_sock_t *)iod;
 		if (s->connecting) {
 			int err = 0;
 			socklen_t len = sizeof (int);
-			if (getsockopt(sock->fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
+			if (getsockopt(iod->fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
 				errno = err;
-				syslog(LOG_ERR, "connect to %s:%d failed (%m)", hostoa(&s->conf), s->conf.port);
-				io_d_free(sock);
+				syslog(LOG_ERR, "connect to %s:%d failed (%m)", io_sock_hostoa(&s->conf), s->conf.port);
+				io_d_free(iod);
 			} else {
 				if (!err)
 					s->connecting = 0;
 			}
 		} else
-			io_buf_d_event_handler(sock, events);
+			io_buf_d_event_handler(iod, events);
+
+		if (s->pollin)
+			s->pollin(iod, events);
 	}
 }
 
 
 /* -------------------------------------------------------------------------- */
 static const io_d_ops_t io_sock_ops = {
-	.free = io_sock_free,
+	.free = io_buf_d_free,
 	.idle = NULL,
 	.event = io_sock_event_handler
 };
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_sock_accept(io_buf_sock_t *t, io_d_t *listen_sock)
+io_buf_sock_t *io_sock_accept(io_buf_sock_t *t, io_sock_listen_t *s, io_event_handler_t *handler)
 {
 	io_sock_addr_t conf;
-	int sock = _io_sock_accept(listen_sock, &conf);
-	if (sock < 0)
+	int fd = _io_sock_accept(&s->d, &conf);
+	if (fd < 0)
 		return NULL;
 
 	if (!t)
@@ -268,16 +265,17 @@ io_buf_sock_t *io_sock_accept(io_buf_sock_t *t, io_d_t *listen_sock)
 
 	t->connecting = 0;
 	t->conf = conf;
+	t->pollin = handler;
 
-	io_buf_d_create(&t->sock, sock, &io_sock_ops);
+	io_buf_d_create(&t->bd, fd, &io_sock_ops);
 	return t;
 }
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf)
+io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler)
 {
-	int sock = _io_sock_connect(conf);
-	if (sock < 0)
+	int fd = _io_sock_connect(conf);
+	if (fd < 0)
 		return NULL;
 
 	if (!t)
@@ -285,7 +283,8 @@ io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf)
 
 	t->connecting = 1;
 	t->conf = *conf;
+	t->pollin = handler;
 
-	io_buf_d_create(&t->sock, sock, &io_sock_ops);
+	io_buf_d_create(&t->bd, fd, &io_sock_ops);
 	return t;
 }

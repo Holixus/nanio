@@ -27,7 +27,7 @@ IF(BUILD_TESTS)
 	TARGET_LINK_LIBRARIES(tests ${static_library_target})
 ENDIF(BUILD_TESTS)
 
-FILE(GLOB LIB_SOURCES io_*.c)
+FILE(GLOB LIB_SOURCES io_*.c io.c)
 
 ADD_LIBRARY(${static_library_target} STATIC ${LIB_SOURCES})
 

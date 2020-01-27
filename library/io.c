@@ -40,7 +40,7 @@ static void io_free()
 		at_exits[i]();
 
 	io_timers_free();
-	io_socks_free();
+	io_ds_free();
 	closelog();
 }
 
