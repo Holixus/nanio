@@ -1,0 +1,6 @@
+/Makefile
+/CMakeCache.txt
+/cmake_install.cmake
+/CMakeFiles/
+/install_manifest.txt
+/sock_echo
