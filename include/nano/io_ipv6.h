@@ -16,6 +16,8 @@ uint8_t  *ipv6_hton(uint8_t *u8, uint16_t const *u16);
 
 char const *ipv6_htoa(uint16_t const ip[8]);
 
+char const *ipv6_stoa(uint16_t const ip[8], int port); // [ip]:port(socket) to ascii
+
 int ipv6_atoh(uint16_t h[8], char const *a);
 int ipv6_atohp(uint16_t h[8], int *prefix_len, char const *a);
 

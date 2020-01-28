@@ -6,6 +6,7 @@
 #include <unistd.h>
 
 #include <string.h>
+#include <errno.h>
 
 #include <sys/types.h>
 #include <arpa/inet.h>
@@ -109,13 +110,28 @@ char const *ipv6_htoa(uint16_t const ip[8])
 	return s;
 }
 
+
+/* -------------------------------------------------------------------------- */
+char const *ipv6_stoa(uint16_t const ip[8], int port)
+{
+	uint8_t n[16];
+	ipv6_hton(n, ip);
+	char *s = _getTmpStr();
+	char *p = s;
+	*p++ = '[';
+	inet_ntop(AF_INET6, n, p, INET6_ADDRSTRLEN);
+	p = strchr(p, 0);
+	sprintf(p, "]:%d", port);
+	return s;
+}
+
 /* -------------------------------------------------------------------------- */
 int ipv6_atoh(uint16_t h[8], char const *a)
 {
 	uint8_t n[16];
 	int r = inet_pton(AF_INET6, a, n) > 0 ? strlen(a) : 0;
 	ipv6_ntoh(h, n);
-	return r;
+	return r < 0 ? r : (r > 0 ? 0 : (errno = EINVAL, -1));
 }
 
 /* -------------------------------------------------------------------------- */

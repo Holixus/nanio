@@ -17,6 +17,7 @@ unsigned int ipv4_itow(unsigned int mask) __attribute__ ((pure));       // mask 
 unsigned int ipv4_wtoi(int width) __attribute__ ((pure));               // width to mask
 unsigned int ipv4_iton(unsigned char *n, unsigned int i);               // host to net
 
+char const *ipv4_stoa(unsigned int num, int port); // ip:port(socket) to ascii
 
 #endif
 

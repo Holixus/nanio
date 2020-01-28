@@ -81,6 +81,15 @@ char const *ipv4_itoa(unsigned int num)
 
 
 /* ------------------------------------------------------------------------ */
+char const *ipv4_stoa(unsigned int num, int port)
+{
+	char *buf = _getTmpStr();
+	sprintf(buf + ipv4_itostr(buf, num), ":%d", port);
+	return buf;
+}
+
+
+/* ------------------------------------------------------------------------ */
 unsigned int ipv4_atoi(char const *ip)
 {
 	unsigned int num = 0, c = 4;
