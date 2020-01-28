@@ -42,26 +42,17 @@ struct io_port {
 
 
 /* -------------------------------------------------------------------------- */
-static void port_free(io_d_t *d)
-{
-	io_port_t *p = (io_port_t *)d;
-	io_sock_free(&p->bs.bd.d);
-	p->up = NULL;
-}
-
-
-/* -------------------------------------------------------------------------- */
 static void port_cmd(io_port_t *self, char *cmd)
 {
-	int port = self->up->conf.port;
-	syslog(LOG_NOTICE, "<%d> cmd: '%s'", port, cmd);
+	char const *sid = io_sock_stoa(&self->up->conf);
+	syslog(LOG_NOTICE, "<%s> cmd: '%s'", sid, cmd);
 	if (!strcmp(cmd, "quit")) {
-		io_buf_sock_writef(&self->bs, "%d: bye!\r\n", port);
+		io_buf_sock_writef(&self->bs, "%s: bye!\r\n", sid);
 		io_d_free(&self->bs.bd.d);
-		syslog(LOG_NOTICE, "<%d> closed", port);
+		syslog(LOG_NOTICE, "<%s> closed", sid);
 		return ;
 	} else {
-		io_buf_sock_writef(&self->bs, "%d: unknown command: '%s'\r\n", port, cmd);
+		io_buf_sock_writef(&self->bs, "%s: unknown command: '%s'\r\n", sid, cmd);
 	}
 }
 
@@ -80,9 +71,8 @@ static void port_event_handler(io_d_t *d, int events)
 			syslog(LOG_ERR, "failed to recv (%m)");
 		} else
 			if (!len) {
-				int port = p->up->conf.port;
 				io_d_free(d); // end of connection
-				syslog(LOG_NOTICE, "<%d> closed", port);
+				syslog(LOG_NOTICE, "<%s - %s> closed", io_sock_stoa(&p->up->conf), io_sock_stoa(&p->bs.conf));
 			} else {
 				char *cmd = p->request, *data = p->end, *lf, *end = p->end + len;
 
@@ -114,24 +104,24 @@ static void port_accept(io_sock_listen_t *self)
 	t->end = t->request;
 
 	if (!io_sock_accept(&t->bs, self, port_event_handler))
-		syslog(LOG_ERR, "<%d> failed to accept: %m", self->conf.port);
+		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->conf));
 	else {
-		syslog(LOG_NOTICE, "<%d> accept: '%s'", self->conf.port, io_sock_hostoa(&t->bs.conf));
-		io_buf_sock_writef(&t->bs, "%d: hello, %s!\r\n", self->conf.port, io_sock_hostoa(&t->bs.conf));
+		char const *sid = io_sock_stoa(&self->conf);
+		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->bs.conf));
+		io_buf_sock_writef(&t->bs, "%s: hello, %s!\r\n", sid, io_sock_stoa(&t->bs.conf));
 	}
 }
 
 /* -------------------------------------------------------------------------- */
-static int port_server_create(uint32_t ip, uint32_t port, char const *iface, int queue_size)
+static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char const *iface, int queue_size)
 {
 	io_sock_listen_conf_t conf = {
 		.queue_size = queue_size ?: 32
 	};
 	if (iface)
 		strcpy(conf.iface, iface);
-	conf.sock.port = port;
-	conf.sock.family = AF_INET;
-	conf.sock.addr.ipv4 = ip;
+	conf.sock = *sock;
+	conf.sock.port += port_offset;
 	//syslog(LOG_NOTICE, "listen: '%s'", io_sock_hosttoa(&conf));
 	/*io_sock_listen_t *self = */io_sock_listen_create(&conf, port_accept);
 	return 0;
@@ -169,11 +159,10 @@ static void free_all()
 
 /* -------------------------------------------------------------------------- */
 typedef
-struct ip_sock_addr {
-	uint32_t ip;
-	uint32_t port;
+struct sock_addr {
+	io_sock_addr_t conf;
 	uint32_t ports_num;
-} ip_sock_addr_t;
+} sock_addr_t;
 
 
 /* -------------------------------------------------------------------------- */
@@ -222,12 +211,12 @@ options:\n\
 	}
 _end_of_opts:;
 
-	ip_sock_addr_t servs[30];
+	sock_addr_t servs[30];
 	int servs_num = 0;
 
 	if (optind < argc) {
 		regex_t r;
-		if (regcomp(&r, "^([0-9.]{7,15})?:([0-9]{1,5})(-[0-9]{1,5})?$", REG_EXTENDED) != 0) {
+		if (regcomp(&r, "^(\\[[^]]+]|[0-9\\.]+)?:([0-9]{1,5})(-[0-9]{1,5})?$", REG_EXTENDED) != 0) {
 			syslog(LOG_CRIT, "A");
 			exit(1);
 		}
@@ -235,15 +224,25 @@ _end_of_opts:;
 			regmatch_t m[10];
 			char *arg = argv[optind];
 			if (!regexec(&r, arg, 10, m, 0)) {
-				ip_sock_addr_t *s = servs + servs_num++;
-				s->ip = m[1].rm_so >= 0 ? ipv4_atoi(arg + m[1].rm_so) : 0;
-				s->port = atoi(arg + m[2].rm_so);
-				s->ports_num = (m[3].rm_so > 0) ? atoi(arg + m[3].rm_so + 1) - s->port + 1 : 1;
+				sock_addr_t *s = servs + servs_num++;
+				if (m[1].rm_so >= 0) {
+					char a[50];
+					size_t len = (unsigned)(m[1].rm_eo - m[1].rm_so);
+					if (arg[m[1].rm_so] == '[') {
+						len -= 2;
+						memcpy(a, arg + m[1].rm_so + 1, len);
+					} else
+						memcpy(a, arg + m[1].rm_so, len);
+					a[len] = 0;
+					io_sock_atohost(&s->conf, a);
+				}
+				s->conf.port = atoi(arg + m[2].rm_so);
+				s->ports_num = (m[3].rm_so > 0) ? atoi(arg + m[3].rm_so + 1) - s->conf.port + 1 : 1;
 				if (s->ports_num < 1) {
 					syslog(LOG_ERR, "invalid argument: '%s'", arg);
 					--servs_num;
 				} else
-					syslog(LOG_NOTICE, "listen server: %s:%d-%d", ipv4_itoa(s->ip), s->port, s->port + s->ports_num - 1);
+					syslog(LOG_NOTICE, "listen server: %s:%d-%d", io_sock_hostoa(&s->conf), s->conf.port, s->conf.port + s->ports_num - 1);
 			} else {
 				syslog(LOG_ERR, "invalid argument: '%s'", arg);
 			}
@@ -263,8 +262,8 @@ _end_of_opts:;
 	io_atexit(free_all);
 
 	for (int i = 0; i < servs_num; ++i) {
-		ip_sock_addr_t *s = servs + i;
+		sock_addr_t *s = servs + i;
 		for (int n = 0; n < s->ports_num; ++n)
-			port_server_create(s->ip, s->port + n, NULL, 32);
+			port_server_create(&s->conf, n, NULL, 32);
 	}
 }
