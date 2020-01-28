@@ -54,6 +54,20 @@ char const *io_sock_hostoa(io_sock_addr_t const *sc)
 }
 
 /* -------------------------------------------------------------------------- */
+char const *io_sock_stoa(io_sock_addr_t const *sc)
+{
+	switch (sc->family) {
+	case AF_INET:
+		return ipv4_stoa(sc->addr.ipv4, sc->port);
+	case AF_UNIX:
+		return sc->addr.path;
+	case AF_INET6:
+		return ipv6_stoa(sc->addr.ipv6, sc->port);
+	}
+	return "[BAD_ADDRESS]";
+}
+
+/* -------------------------------------------------------------------------- */
 int io_sock_atohost(io_sock_addr_t *host, char const *a)
 {
 	if (*a == '/') {
@@ -70,6 +84,41 @@ int io_sock_atohost(io_sock_addr_t *host, char const *a)
 	}
 
 	return -1;
+}
+
+/* -------------------------------------------------------------------------- */
+int io_sock_atos(io_sock_addr_t *host, char const *a)
+{
+	if (*a == '/') {
+		host->addr.path = a;
+		return host->family = AF_UNIX;
+	}
+	if (*a == '[') {
+		char const *b = strchr(++a, ']');
+		syslog(LOG_NOTICE, "[..");
+		if (!b || b[1] != ':')
+			return -1;
+		b += 2;
+
+		char addr[48];
+		unsigned int len = b - a;
+		memcpy(addr, a, len);
+		addr[len] = 0;
+		syslog(LOG_NOTICE, "[%s]", addr);
+		if (!ipv6_atoh(host->addr.ipv6, addr))
+			return -1;
+
+		host->port = atoi(b);
+		return host->family = AF_INET6;
+	}
+	if (ipv4_isip(a)) {
+		host->addr.ipv4 = ipv4_atoi(a);
+		char const *colon = strchr(a, ':');
+		if (colon)
+			host->port = atoi(colon + 1);
+		return host->family = AF_INET;
+	}
+	return (errno = EINVAL), -1;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -121,7 +170,7 @@ static int _io_sock_listen(io_sock_listen_conf_t *conf)
 	unisa_t sa;
 	size_t sa_size = _io_set_addr(&sa, &conf->sock);
 
-	int sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	int sock = socket(conf->sock.family, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
 	if (conf->iface[0] && (sa.family == AF_INET || sa.family == AF_INET6))
 		if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, conf->iface, (socklen_t)strlen(conf->iface) + 1) < 0) {
@@ -132,12 +181,12 @@ static int _io_sock_listen(io_sock_listen_conf_t *conf)
 
 	int on;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
-		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s:%d' (%m)", io_sock_hostoa(&conf->sock), conf->sock.port);
+		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s' (%m)", io_sock_stoa(&conf->sock));
 		exit(1);
 	}
 
 	if (bind(sock, &sa.sa, sa_size) < 0 || listen(sock, conf->queue_size) < 0) {
-		syslog(LOG_ERR, "fail to bind listen socket to '%s:%d' (%m)", io_sock_hostoa(&conf->sock), conf->sock.port);
+		syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", io_sock_stoa(&conf->sock));
 		close(sock);
 		return -1;
 	}
@@ -218,7 +267,7 @@ io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, io_sock_acc
 
 
 /* -------------------------------------------------------------------------- */
-static void io_sock_event_handler(io_d_t *iod, int events)
+void io_sock_event_handler(io_d_t *iod, int events)
 {
 	if (events & POLLOUT)
 		io_buf_d_event_handler(iod, events);
@@ -246,8 +295,14 @@ static void io_sock_event_handler(io_d_t *iod, int events)
 
 
 /* -------------------------------------------------------------------------- */
+void io_sock_free(io_d_t *d)
+{
+	io_buf_d_free(d);
+}
+
+/* -------------------------------------------------------------------------- */
 static const io_d_ops_t io_sock_ops = {
-	.free = io_buf_d_free,
+	.free = io_sock_free,
 	.idle = NULL,
 	.event = io_sock_event_handler
 };

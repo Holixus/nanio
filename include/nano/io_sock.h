@@ -38,13 +38,6 @@ struct io_sock_listen {
 };
 
 /* -------------------------------------------------------------------------- */
-
-/* -------------------------------------------------------------------------- */
-io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, io_sock_accept_handler_t *handler);
-void io_sock_free(io_d_t *sock);
-
-
-/* -------------------------------------------------------------------------- */
 typedef
 struct io_buf_sock {
 	io_buf_d_t bd;
@@ -55,14 +48,25 @@ struct io_buf_sock {
 
 
 /* -------------------------------------------------------------------------- */
+io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, io_sock_accept_handler_t *handler);
+
 io_buf_sock_t *io_sock_accept (io_buf_sock_t *t, io_sock_listen_t *s, io_event_handler_t *handler);
 io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler);
 
 
+/* -------------------------------------------------------------------------- */
+/* internals */
+void io_sock_free(io_d_t *d);
+void io_sock_event_handler(io_d_t *d, int events);
+
+/* -------------------------------------------------------------------------- */
+/* helpers */
 int io_sock_atohost(io_sock_addr_t *host, char const *a);
 char const *io_sock_hostoa(io_sock_addr_t const *sc);
 
-#define io_sock_free(t)                      io_buf_d_free(t)
+int io_sock_atos(io_sock_addr_t *host, char const *a); // ascii to sock
+char const *io_sock_stoa(io_sock_addr_t const *sc);    // sock to ascii
+
 
 #define io_buf_sock_recv(bs, b, s, f)        recv((bs)->bd.d.fd, b, s, f)
 
