@@ -29,59 +29,6 @@
 #include "nano/io_ipv4.h"
 #include "nano/io_ipv6.h"
 
-/* -------------------------------------------------------------------------- */
-static int _io_stream_listen(io_stream_listen_conf_t *conf)
-{
-	unisa_t sa;
-	size_t sa_size = io_sock_set_addr(&sa, &conf->sock);
-
-	int sock = socket(conf->sock.family, SOCK_STREAM | SOCK_NONBLOCK, 0);
-
-	if (conf->iface[0] && (sa.family == AF_INET || sa.family == AF_INET6))
-		if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, conf->iface, (socklen_t)strlen(conf->iface) + 1) < 0) {
-			syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", conf->iface);
-			close(sock);
-			return -1;
-		}
-
-	int on;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
-		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s' (%m)", io_sock_stoa(&conf->sock));
-		exit(1);
-	}
-
-	if (bind(sock, &sa.sa, sa_size) < 0 || listen(sock, conf->queue_size) < 0) {
-		syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", io_sock_stoa(&conf->sock));
-		close(sock);
-		return -1;
-	}
-
-	return sock;
-}
-
-
-/* -------------------------------------------------------------------------- */
-static int _io_stream_accept(io_d_t *sock, io_sock_addr_t *sc)
-{
-/*	if (!sc) {
-		int sock = accept4(sock->fd, NULL, NULL, SOCK_NONBLOCK);
-		if (sock < 0)
-			syslog(LOG_ERR, "fail to accept connection (%m)");
-		return sock;
-	}
-*/
-	unisa_t sa;
-	memset(&sa, 0, sizeof sa);
-	socklen_t addrlen = sizeof sa;
-
-	int sd = accept4(sock->fd, &sa.sa, &addrlen, SOCK_NONBLOCK);
-	if (sd < 0)
-		syslog(LOG_ERR, "fail to accept connection (%m)");
-	else
-		io_sock_get_addr(sc, &sa);
-	return sd;
-}
-
 
 /* -------------------------------------------------------------------------- */
 static int _io_stream_connect(io_sock_addr_t *conf)
@@ -117,9 +64,15 @@ static const io_d_ops_t io_stream_listen_ops = {
 /* -------------------------------------------------------------------------- */
 io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_stream_accept_handler_t *handler)
 {
-	int sock = _io_stream_listen(conf);
+	int sock = io_binded_socket(SOCK_STREAM, &conf->sock, conf->iface);
 	if (sock < 0)
 		return NULL;
+
+	if (listen(sock, conf->queue_size) < 0) {
+		syslog(LOG_ERR, "fail to listen socket to '%s' (%m)", io_sock_stoa(&conf->sock));
+		close(sock);
+		return NULL;
+	}
 
 	io_stream_listen_t *self = (io_stream_listen_t *)calloc(1, sizeof (io_stream_listen_t));
 
@@ -176,18 +129,36 @@ static const io_d_ops_t io_stream_ops = {
 io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_event_handler_t *handler)
 {
 	io_sock_addr_t conf;
-	int fd = _io_stream_accept(&s->d, &conf);
-	if (fd < 0)
+	int sd;
+
+	if (s->conf.family == AF_UNIX) {
+		sd = accept4(s->d.fd, NULL, NULL, SOCK_NONBLOCK);
+	} else {
+		unisa_t sa;
+		memset(&sa, 0, sizeof sa);
+		socklen_t addrlen = sizeof sa;
+		sd = accept4(s->d.fd, &sa.sa, &addrlen, SOCK_NONBLOCK);
+		if (sd >= 0)
+			io_sock_get_addr(&conf, &sa);
+	}
+
+	if (sd < 0) {
+		syslog(LOG_ERR, "fail to accept connection (%m)");
 		return NULL;
+	}
 
 	if (!t)
 		t = (io_buf_sock_t *)calloc(1, sizeof (io_buf_sock_t));
 
+	if (s->conf.family == AF_UNIX)
+		memset(&t->conf, 0, sizeof t->conf);
+	else
+		t->conf = conf;
+
 	t->connecting = 0;
-	t->conf = conf;
 	t->pollin = handler;
 
-	io_buf_d_create(&t->bd, fd, &io_stream_ops);
+	io_buf_d_create(&t->bd, sd, &io_stream_ops);
 	return t;
 }
 

@@ -155,3 +155,35 @@ size_t io_sock_get_addr(io_sock_addr_t *conf, unisa_t const *sa)
 	return 0;
 }
 
+
+/* -------------------------------------------------------------------------- */
+int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface)
+{
+	unisa_t sa;
+	size_t sa_size = io_sock_set_addr(&sa, conf);
+
+	int sock = socket(conf->family, type | SOCK_NONBLOCK, 0);
+
+	if (iface[0] && (sa.family == AF_INET || sa.family == AF_INET6))
+		if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, iface, (socklen_t)strlen(iface) + 1) < 0) {
+			syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", iface);
+			close(sock);
+			return -1;
+		}
+
+	int on;
+	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
+		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s' (%m)", io_sock_stoa(conf));
+		close(sock);
+		return -1;
+	}
+
+	if (bind(sock, &sa.sa, sa_size) < 0) {
+		syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", io_sock_stoa(conf));
+		close(sock);
+		return -1;
+	}
+
+	return sock;
+}
+

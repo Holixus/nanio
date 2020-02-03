@@ -40,4 +40,7 @@ union _sockaddr {
 size_t io_sock_set_addr(unisa_t *sa, io_sock_addr_t const *conf);
 size_t io_sock_get_addr(io_sock_addr_t *conf, unisa_t const *sa);
 
+/* -------------------------------------------------------------------------- */
+int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface);
+
 #endif
