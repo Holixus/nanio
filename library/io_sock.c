@@ -24,151 +24,16 @@
 #include "nano/io_buf.h"
 #include "nano/io_buf_d.h"
 
-#include "nano/io_sock.h"
+#include "nano/io_stream.h"
 
 #include "nano/io_ipv4.h"
 #include "nano/io_ipv6.h"
 
-typedef
-union _sockaddr {
-	sa_family_t family;
-	struct sockaddr sa;
-	struct sockaddr_un un;
-	struct sockaddr_in in;
-	struct sockaddr_in6 in6;
-} unisa_t;
-
-
 /* -------------------------------------------------------------------------- */
-char const *io_sock_hostoa(io_sock_addr_t const *sc)
-{
-	switch (sc->family) {
-	case AF_INET:
-		return ipv4_itoa(sc->addr.ipv4);
-	case AF_UNIX:
-		return sc->addr.path;
-	case AF_INET6:
-		return ipv6_htoa(sc->addr.ipv6);
-	}
-	return "[BAD_ADDRESS]";
-}
-
-/* -------------------------------------------------------------------------- */
-char const *io_sock_stoa(io_sock_addr_t const *sc)
-{
-	switch (sc->family) {
-	case AF_INET:
-		return ipv4_stoa(sc->addr.ipv4, sc->port);
-	case AF_UNIX:
-		return sc->addr.path;
-	case AF_INET6:
-		return ipv6_stoa(sc->addr.ipv6, sc->port);
-	}
-	return "[BAD_ADDRESS]";
-}
-
-/* -------------------------------------------------------------------------- */
-int io_sock_atohost(io_sock_addr_t *host, char const *a)
-{
-	if (*a == '/') {
-		host->addr.path = a;
-		return host->family = AF_UNIX;
-	}
-	if (ipv4_isip(a)) {
-		host->addr.ipv4 = ipv4_atoi(a);
-		return host->family = AF_INET;
-	}
-	if (ipv6_isip(a)) {
-		ipv6_atoh(host->addr.ipv6, a);
-		return host->family = AF_INET6;
-	}
-
-	return -1;
-}
-
-/* -------------------------------------------------------------------------- */
-int io_sock_atos(io_sock_addr_t *host, char const *a)
-{
-	if (*a == '/') {
-		host->addr.path = a;
-		return host->family = AF_UNIX;
-	}
-	if (*a == '[') {
-		char const *b = strchr(++a, ']');
-		syslog(LOG_NOTICE, "[..");
-		if (!b || b[1] != ':')
-			return -1;
-		b += 2;
-
-		char addr[48];
-		unsigned int len = b - a;
-		memcpy(addr, a, len);
-		addr[len] = 0;
-		syslog(LOG_NOTICE, "[%s]", addr);
-		if (!ipv6_atoh(host->addr.ipv6, addr))
-			return -1;
-
-		host->port = atoi(b);
-		return host->family = AF_INET6;
-	}
-	if (ipv4_isip(a)) {
-		host->addr.ipv4 = ipv4_atoi(a);
-		char const *colon = strchr(a, ':');
-		if (colon)
-			host->port = atoi(colon + 1);
-		return host->family = AF_INET;
-	}
-	return (errno = EINVAL), -1;
-}
-
-/* -------------------------------------------------------------------------- */
-static size_t _io_set_addr(unisa_t *sa, io_sock_addr_t const *conf)
-{
-	memset(sa, 0, sizeof *sa);
-	switch (sa->family = conf->family) {
-	case AF_INET:
-		sa->in.sin_port = htons(conf->port);
-		sa->in.sin_addr.s_addr = htonl(conf->addr.ipv4 ? conf->addr.ipv4 : INADDR_ANY);
-		return sizeof sa->in;
-
-	case AF_UNIX:
-		strcpy(sa->un.sun_path, conf->addr.path);
-		return sizeof sa->un;
-
-	case AF_INET6:
-		sa->in6.sin6_port = htons(conf->port);
-		ipv6_hton(sa->in6.sin6_addr.s6_addr, conf->addr.ipv6);
-		return sizeof sa->in6;
-	}
-	return 0;
-}
-
-/* -------------------------------------------------------------------------- */
-static size_t _io_get_addr(io_sock_addr_t *conf, unisa_t const *sa)
-{
-	switch (conf->family = sa->family) {
-	case AF_INET:
-		conf->port = ntohs(sa->in.sin_port);
-		conf->addr.ipv4 = ntohl(sa->in.sin_addr.s_addr);
-		return sizeof sa->in;
-
-	case AF_UNIX:
-		conf->addr.path = "";//sa->un.sun_path; // accept doesn't returns remote unix path
-		return sizeof sa->un;
-
-	case AF_INET6:
-		conf->port = ntohs(sa->in6.sin6_port);
-		ipv6_ntoh(conf->addr.ipv6, sa->in6.sin6_addr.s6_addr);
-		return sizeof sa->in6;
-	}
-	return 0;
-}
-
-/* -------------------------------------------------------------------------- */
-static int _io_sock_listen(io_sock_listen_conf_t *conf)
+static int _io_stream_listen(io_stream_listen_conf_t *conf)
 {
 	unisa_t sa;
-	size_t sa_size = _io_set_addr(&sa, &conf->sock);
+	size_t sa_size = io_sock_set_addr(&sa, &conf->sock);
 
 	int sock = socket(conf->sock.family, SOCK_STREAM | SOCK_NONBLOCK, 0);
 
@@ -196,7 +61,7 @@ static int _io_sock_listen(io_sock_listen_conf_t *conf)
 
 
 /* -------------------------------------------------------------------------- */
-static int _io_sock_accept(io_d_t *sock, io_sock_addr_t *sc)
+static int _io_stream_accept(io_d_t *sock, io_sock_addr_t *sc)
 {
 /*	if (!sc) {
 		int sock = accept4(sock->fd, NULL, NULL, SOCK_NONBLOCK);
@@ -213,16 +78,16 @@ static int _io_sock_accept(io_d_t *sock, io_sock_addr_t *sc)
 	if (sd < 0)
 		syslog(LOG_ERR, "fail to accept connection (%m)");
 	else
-		_io_get_addr(sc, &sa);
+		io_sock_get_addr(sc, &sa);
 	return sd;
 }
 
 
 /* -------------------------------------------------------------------------- */
-static int _io_sock_connect(io_sock_addr_t *conf)
+static int _io_stream_connect(io_sock_addr_t *conf)
 {
 	unisa_t sa;
-	size_t sa_size = _io_set_addr(&sa, conf);
+	size_t sa_size = io_sock_set_addr(&sa, conf);
 
 	int sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
 	if (connect(sock, &sa.sa, sa_size) < 0 && errno != EINPROGRESS) {
@@ -236,38 +101,38 @@ static int _io_sock_connect(io_sock_addr_t *conf)
 
 
 /* -------------------------------------------------------------------------- */
-static void io_sock_listen_event_handler(io_d_t *iod, int events)
+static void io_stream_listen_event_handler(io_d_t *iod, int events)
 {
-	io_sock_listen_t *p = (io_sock_listen_t *)iod;
+	io_stream_listen_t *p = (io_stream_listen_t *)iod;
 	p->accept_handler(p);
 }
 
 /* -------------------------------------------------------------------------- */
-static const io_d_ops_t io_sock_listen_ops = {
+static const io_d_ops_t io_stream_listen_ops = {
 	.free = NULL,
 	.idle = NULL,
-	.event = io_sock_listen_event_handler
+	.event = io_stream_listen_event_handler
 };
 
 /* -------------------------------------------------------------------------- */
-io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, io_sock_accept_handler_t *handler)
+io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_stream_accept_handler_t *handler)
 {
-	int sock = _io_sock_listen(conf);
+	int sock = _io_stream_listen(conf);
 	if (sock < 0)
 		return NULL;
 
-	io_sock_listen_t *self = (io_sock_listen_t *)calloc(1, sizeof (io_sock_listen_t));
+	io_stream_listen_t *self = (io_stream_listen_t *)calloc(1, sizeof (io_stream_listen_t));
 
 	self->conf = conf->sock;
 	self->accept_handler = handler;
 
-	io_d_init(&self->d, sock, POLLIN, &io_sock_listen_ops);
+	io_d_init(&self->d, sock, POLLIN, &io_stream_listen_ops);
 	return self;
 }
 
 
 /* -------------------------------------------------------------------------- */
-void io_sock_event_handler(io_d_t *iod, int events)
+void io_stream_event_handler(io_d_t *iod, int events)
 {
 	if (events & POLLOUT)
 		io_buf_d_event_handler(iod, events);
@@ -295,23 +160,23 @@ void io_sock_event_handler(io_d_t *iod, int events)
 
 
 /* -------------------------------------------------------------------------- */
-void io_sock_free(io_d_t *d)
+void io_stream_free(io_d_t *d)
 {
 	io_buf_d_free(d);
 }
 
 /* -------------------------------------------------------------------------- */
-static const io_d_ops_t io_sock_ops = {
-	.free = io_sock_free,
+static const io_d_ops_t io_stream_ops = {
+	.free = io_stream_free,
 	.idle = NULL,
-	.event = io_sock_event_handler
+	.event = io_stream_event_handler
 };
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_sock_accept(io_buf_sock_t *t, io_sock_listen_t *s, io_event_handler_t *handler)
+io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_event_handler_t *handler)
 {
 	io_sock_addr_t conf;
-	int fd = _io_sock_accept(&s->d, &conf);
+	int fd = _io_stream_accept(&s->d, &conf);
 	if (fd < 0)
 		return NULL;
 
@@ -322,14 +187,14 @@ io_buf_sock_t *io_sock_accept(io_buf_sock_t *t, io_sock_listen_t *s, io_event_ha
 	t->conf = conf;
 	t->pollin = handler;
 
-	io_buf_d_create(&t->bd, fd, &io_sock_ops);
+	io_buf_d_create(&t->bd, fd, &io_stream_ops);
 	return t;
 }
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler)
+io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler)
 {
-	int fd = _io_sock_connect(conf);
+	int fd = _io_stream_connect(conf);
 	if (fd < 0)
 		return NULL;
 
@@ -340,6 +205,6 @@ io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_
 	t->conf = *conf;
 	t->pollin = handler;
 
-	io_buf_d_create(&t->bd, fd, &io_sock_ops);
+	io_buf_d_create(&t->bd, fd, &io_stream_ops);
 	return t;
 }

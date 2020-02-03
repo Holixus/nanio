@@ -22,14 +22,11 @@
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
 #include "nano/io_buf_d.h"
-#include "nano/io_sock.h"
+#include "nano/io_stream.h"
 #include "nano/io_ipv4.h"
 
 
 /* -------------------------------------------------------------------------- */
-#define IO_CON_BUFFER_SIZE (0x1000)
-
-
 typedef struct io_port io_port_t;
 
 /* -------------------------------------------------------------------------- */
@@ -37,7 +34,7 @@ struct io_port {
 	io_buf_sock_t bs;
 	char request[200];
 	char *end;
-	io_sock_listen_t *up;
+	io_stream_listen_t *up;
 };
 
 
@@ -96,14 +93,14 @@ static void port_event_handler(io_d_t *d, int events)
 
 
 /* -------------------------------------------------------------------------- */
-static void port_accept(io_sock_listen_t *self)
+static void port_accept(io_stream_listen_t *self)
 {
 	io_port_t *t = (io_port_t *)calloc(1, sizeof (io_port_t));
 	t->up = self;
 
 	t->end = t->request;
 
-	if (!io_sock_accept(&t->bs, self, port_event_handler))
+	if (!io_stream_accept(&t->bs, self, port_event_handler))
 		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->conf));
 	else {
 		char const *sid = io_sock_stoa(&self->conf);
@@ -115,7 +112,7 @@ static void port_accept(io_sock_listen_t *self)
 /* -------------------------------------------------------------------------- */
 static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char const *iface, int queue_size)
 {
-	io_sock_listen_conf_t conf = {
+	io_stream_listen_conf_t conf = {
 		.queue_size = queue_size ?: 32
 	};
 	if (iface)
@@ -123,7 +120,7 @@ static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char c
 	conf.sock = *sock;
 	conf.sock.port += port_offset;
 	//syslog(LOG_NOTICE, "listen: '%s'", io_sock_hosttoa(&conf));
-	/*io_sock_listen_t *self = */io_sock_listen_create(&conf, port_accept);
+	/*io_stream_listen_t *self = */io_stream_listen_create(&conf, port_accept);
 	return 0;
 }
 

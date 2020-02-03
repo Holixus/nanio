@@ -1,21 +1,12 @@
 #ifndef NANO_STREAM_H
 #define NANO_STREAM_H
 
-typedef
-struct sock_conf {
-	uint16_t port;
-	uint16_t family;
-	union {
-		char const *path;
-		uint32_t ipv4;
-		uint16_t ipv6[8];
-	} addr;
-} io_sock_addr_t;
+#include "nano/io_sock_addr.h"
 
-typedef struct io_sock_listen io_sock_listen_t;
+typedef struct io_stream_listen io_stream_listen_t;
 
 typedef
-void (io_sock_accept_handler_t)(io_sock_listen_t *self);
+void (io_stream_accept_handler_t)(io_stream_listen_t *self);
 
 typedef
 void (io_event_handler_t)(io_d_t *iod, int events);
@@ -27,14 +18,14 @@ struct sock_listen_conf {
 	int queue_size;
 	io_sock_addr_t sock;
 	char iface[24];
-} io_sock_listen_conf_t;
+} io_stream_listen_conf_t;
 
 
 /* -------------------------------------------------------------------------- */
-struct io_sock_listen {
+struct io_stream_listen {
 	io_d_t d;
 	io_sock_addr_t conf;
-	io_sock_accept_handler_t *accept_handler;
+	io_stream_accept_handler_t *accept_handler;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -48,25 +39,19 @@ struct io_buf_sock {
 
 
 /* -------------------------------------------------------------------------- */
-io_sock_listen_t *io_sock_listen_create(io_sock_listen_conf_t *conf, io_sock_accept_handler_t *handler);
+io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_stream_accept_handler_t *handler);
 
-io_buf_sock_t *io_sock_accept (io_buf_sock_t *t, io_sock_listen_t *s, io_event_handler_t *handler);
-io_buf_sock_t *io_sock_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler);
+io_buf_sock_t *io_stream_accept (io_buf_sock_t *t, io_stream_listen_t *s, io_event_handler_t *handler);
+io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler);
 
 
 /* -------------------------------------------------------------------------- */
 /* internals */
-void io_sock_free(io_d_t *d);
-void io_sock_event_handler(io_d_t *d, int events);
+void io_stream_free(io_d_t *d);
+void io_stream_event_handler(io_d_t *d, int events);
 
 /* -------------------------------------------------------------------------- */
 /* helpers */
-int io_sock_atohost(io_sock_addr_t *host, char const *a);
-char const *io_sock_hostoa(io_sock_addr_t const *sc);
-
-int io_sock_atos(io_sock_addr_t *host, char const *a); // ascii to sock
-char const *io_sock_stoa(io_sock_addr_t const *sc);    // sock to ascii
-
 
 #define io_buf_sock_recv(bs, b, s, f)        recv((bs)->bd.d.fd, b, s, f)
 
