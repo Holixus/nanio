@@ -3,7 +3,6 @@ cmake_minimum_required(VERSION 2.6)
 PROJECT(nanio)
 
 OPTION(BUILD_SHARED_LIBRARY "Build shared library" OFF)
-OPTION(BUILD_TESTS "Build tests application" OFF)
 
 OPTION(IPV6_SOCKET "" ON)
 OPTION(UNIX_SOCKET "" ON)

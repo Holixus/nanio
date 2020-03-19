@@ -48,10 +48,10 @@ static int _io_stream_connect(io_sock_addr_t *conf)
 
 
 /* -------------------------------------------------------------------------- */
-static void io_stream_listen_event_handler(io_d_t *iod, int events)
+static int io_stream_listen_event_handler(io_d_t *iod, int events)
 {
 	io_stream_listen_t *p = (io_stream_listen_t *)iod;
-	p->accept_handler(p);
+	return p->accept_handler(p);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -85,10 +85,11 @@ io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_st
 
 
 /* -------------------------------------------------------------------------- */
-void io_stream_event_handler(io_d_t *iod, int events)
+int io_stream_event_handler(io_d_t *iod, int events)
 {
 	if (events & POLLOUT)
-		io_buf_d_event_handler(iod, events);
+		if (io_buf_d_event_handler(iod, events) < 0)
+			return -1;
 
 	if (events & POLLIN) {
 		io_buf_sock_t *s = (io_buf_sock_t *)iod;
@@ -99,16 +100,19 @@ void io_stream_event_handler(io_d_t *iod, int events)
 				errno = err;
 				syslog(LOG_ERR, "connect to %s:%d failed (%m)", io_sock_hostoa(&s->conf), s->conf.port);
 				io_d_free(iod);
+				return -1;
 			} else {
 				if (!err)
 					s->connecting = 0;
 			}
 		} else
-			io_buf_d_event_handler(iod, events);
+			if (io_buf_d_event_handler(iod, events) < 0)
+				return -1;
 
 		if (s->pollin)
-			s->pollin(iod, events);
+			return s->pollin(iod, events);
 	}
+	return 0;
 }
 
 
@@ -126,7 +130,7 @@ static const io_d_ops_t io_stream_ops = {
 };
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_event_handler_t *handler)
+io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_d_event_handler_t *handler)
 {
 	io_sock_addr_t conf;
 	int sd;
@@ -163,7 +167,7 @@ io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_even
 }
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler)
+io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_d_event_handler_t *handler)
 {
 	int fd = _io_stream_connect(conf);
 	if (fd < 0)

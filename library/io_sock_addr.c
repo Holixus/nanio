@@ -78,6 +78,21 @@ int io_sock_atohost(io_sock_addr_t *host, char const *a)
 }
 
 /* -------------------------------------------------------------------------- */
+int io_sock_any(io_sock_addr_t *host, int family, int port)
+{
+	host->port = port;
+	switch (host->family = family) {
+	case AF_INET:
+		host->addr.ipv4 = 0;
+		return 0;
+	case AF_INET6:
+		memset(host->addr.ipv6, 0, sizeof host->addr.ipv6);
+		return 0;
+	}
+	return errno = EINVAL, -1;
+}
+
+/* -------------------------------------------------------------------------- */
 int io_sock_atos(io_sock_addr_t *host, char const *a)
 {
 	if (*a == '/') {
@@ -86,18 +101,18 @@ int io_sock_atos(io_sock_addr_t *host, char const *a)
 	}
 	if (*a == '[') {
 		char const *b = strchr(++a, ']');
-		syslog(LOG_NOTICE, "[..");
+		//syslog(LOG_NOTICE, "[..");
 		if (!b || b[1] != ':')
-			return -1;
+			return (errno = EINVAL), -1;
 		b += 2;
 
 		char addr[48];
 		unsigned int len = b - a;
 		memcpy(addr, a, len);
 		addr[len] = 0;
-		syslog(LOG_NOTICE, "[%s]", addr);
+		//syslog(LOG_NOTICE, "[%s]", addr);
 		if (!ipv6_atoh(host->addr.ipv6, addr))
-			return -1;
+			return (errno = EINVAL), -1;
 
 		host->port = atoi(b);
 		return host->family = AF_INET6;
@@ -157,19 +172,25 @@ size_t io_sock_get_addr(io_sock_addr_t *conf, unisa_t const *sa)
 
 
 /* -------------------------------------------------------------------------- */
-int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface)
+int io_socket(int type, int family, char const *iface)
 {
-	unisa_t sa;
-	size_t sa_size = io_sock_set_addr(&sa, conf);
+	int sock = socket(family, type | SOCK_NONBLOCK, 0);
 
-	int sock = socket(conf->family, type | SOCK_NONBLOCK, 0);
-
-	if (iface[0] && (sa.family == AF_INET || sa.family == AF_INET6))
+	if (iface[0] && (family == AF_INET || family == AF_INET6))
 		if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, iface, (socklen_t)strlen(iface) + 1) < 0) {
 			syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", iface);
 			close(sock);
 			return -1;
 		}
+
+	return sock;
+}
+
+
+/* -------------------------------------------------------------------------- */
+int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface)
+{
+	int sock = io_socket(type, conf->family, iface);
 
 	int on;
 	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
@@ -178,6 +199,8 @@ int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface)
 		return -1;
 	}
 
+	unisa_t sa;
+	size_t sa_size = io_sock_set_addr(&sa, conf);
 	if (bind(sock, &sa.sa, sa_size) < 0) {
 		syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", io_sock_stoa(conf));
 		close(sock);

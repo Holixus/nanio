@@ -55,7 +55,7 @@ static void port_cmd(io_port_t *self, char *cmd)
 
 
 /* -------------------------------------------------------------------------- */
-static void port_event_handler(io_d_t *d, int events)
+static int port_event_handler(io_d_t *d, int events)
 {
 	io_port_t *p = (io_port_t *)d;
 	if (events & POLLIN) {
@@ -66,6 +66,7 @@ static void port_event_handler(io_d_t *d, int events)
 		} while (len < 0 && errno == EINTR);
 		if (len < 0) {
 			syslog(LOG_ERR, "failed to recv (%m)");
+			return -1;
 		} else
 			if (!len) {
 				io_d_free(d); // end of connection
@@ -89,24 +90,27 @@ static void port_event_handler(io_d_t *d, int events)
 				}
 			}
 	}
+	return 0;
 }
 
 
 /* -------------------------------------------------------------------------- */
-static void port_accept(io_stream_listen_t *self)
+static int port_accept(io_stream_listen_t *self)
 {
 	io_port_t *t = (io_port_t *)calloc(1, sizeof (io_port_t));
 	t->up = self;
 
 	t->end = t->request;
 
-	if (!io_stream_accept(&t->bs, self, port_event_handler))
+	if (!io_stream_accept(&t->bs, self, port_event_handler)) {
 		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->conf));
-	else {
+		return -1;
+	} else {
 		char const *sid = io_sock_stoa(&self->conf);
 		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->bs.conf));
 		io_buf_sock_writef(&t->bs, "%s: hello, %s!\r\n", sid, io_sock_stoa(&t->bs.conf));
 	}
+	return 0;
 }
 
 /* -------------------------------------------------------------------------- */

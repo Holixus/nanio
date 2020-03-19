@@ -22,7 +22,7 @@ int io_buf_d_writef(io_d_t *d, char const *fmt, ...) __attribute__ ((format (pri
 /* -------------------------------------------------------------------------- */
 /* internals */
 void io_buf_d_free(io_d_t *d);
-void io_buf_d_event_handler(io_d_t *d, int events);
+int  io_buf_d_event_handler(io_d_t *d, int events);
 
 #endif
 

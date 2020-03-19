@@ -5,14 +5,18 @@
 /* -------------------------------------------------------------------------- */
 typedef struct io_d io_d_t;
 
-typedef void (*io_d_poll_handler_t)(io_d_t *d);
+typedef int (*io_d_poll_handler_t)(io_d_t *d);
+
+typedef
+int (io_d_event_handler_t)(io_d_t *iod, int events);
+
 
 /* -------------------------------------------------------------------------- */
 typedef
 struct {
 	void (*free)(io_d_t *d);
 	void (*idle)(io_d_t *d);
-	void (*event)(io_d_t *d, int events);
+	int  (*event)(io_d_t *d, int events);
 } io_d_ops_t;
 
 /* -------------------------------------------------------------------------- */

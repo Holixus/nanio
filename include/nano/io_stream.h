@@ -6,15 +6,12 @@
 typedef struct io_stream_listen io_stream_listen_t;
 
 typedef
-void (io_stream_accept_handler_t)(io_stream_listen_t *self);
-
-typedef
-void (io_event_handler_t)(io_d_t *iod, int events);
+int (io_stream_accept_handler_t)(io_stream_listen_t *self);
 
 
 /* -------------------------------------------------------------------------- */
 typedef
-struct sock_listen_conf {
+struct stream_listen_conf {
 	int queue_size;
 	io_sock_addr_t sock;
 	char iface[24];
@@ -34,21 +31,21 @@ struct io_buf_sock {
 	io_buf_d_t bd;
 	io_sock_addr_t conf;
 	int connecting;
-	io_event_handler_t *pollin;
+	io_d_event_handler_t *pollin;
 } io_buf_sock_t;
 
 
 /* -------------------------------------------------------------------------- */
 io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_stream_accept_handler_t *handler);
 
-io_buf_sock_t *io_stream_accept (io_buf_sock_t *t, io_stream_listen_t *s, io_event_handler_t *handler);
-io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_event_handler_t *handler);
+io_buf_sock_t *io_stream_accept (io_buf_sock_t *t, io_stream_listen_t *s, io_d_event_handler_t *handler);
+io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_d_event_handler_t *handler);
 
 
 /* -------------------------------------------------------------------------- */
 /* internals */
 void io_stream_free(io_d_t *d);
-void io_stream_event_handler(io_d_t *d, int events);
+int  io_stream_event_handler(io_d_t *d, int events);
 
 /* -------------------------------------------------------------------------- */
 /* helpers */

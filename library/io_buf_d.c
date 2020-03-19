@@ -68,19 +68,22 @@ int io_buf_d_writef(io_d_t *d, char const *fmt, ...)
 }
 
 /* -------------------------------------------------------------------------- */
-void io_buf_d_event_handler(io_d_t *d, int events)
+int io_buf_d_event_handler(io_d_t *d, int events)
 {
 	io_buf_d_t *b = (io_buf_d_t *)d;
 	if (events & POLLOUT) {
 		if (io_buf_send(&b->out, d->fd) < 0) {
 			if (errno == ECONNRESET || errno == ENOTCONN || errno == EPIPE)
 				io_d_free(d);
+			else
+				return -1;
 		} else
 			if (io_buf_is_empty(&b->out))
 				d->events &= ~POLLOUT;
 	}
 	if (events & POLLIN && b->pollin)
-		b->pollin(d);
+		return b->pollin(d);
+	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
