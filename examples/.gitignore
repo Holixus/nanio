@@ -3,4 +3,5 @@
 /cmake_install.cmake
 /CMakeFiles/
 /install_manifest.txt
-/test_map
+/sock-echo
+/rpxys

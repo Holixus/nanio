@@ -109,13 +109,13 @@ static int io_dgram_client_event_handler(io_d_t *iod, int events)
 			iod->events &= ~POLLOUT;
 	}
 
-	if (events & POLLIN && self->handler) {
+	if (events & POLLIN && iod->vmt->recvd) {
 		io_sock_addr_t addr;
 		char buf[1500];
 
 		ssize_t recvd = io_dgram_recv(iod, &addr, buf, sizeof buf);
 		if (recvd > 0)
-			self->handler(self, &addr, buf, recvd);
+			iod->vmt->recvd(iod, &addr, buf, recvd);
 		else
 			if (recvd < 0)
 				return -1;
@@ -124,15 +124,18 @@ static int io_dgram_client_event_handler(io_d_t *iod, int events)
 	return 0;
 }
 
+
 /* -------------------------------------------------------------------------- */
-static const io_d_ops_t io_dgram_client_ops = {
+io_vmt_t io_dgram_client_vmt = {
+	.class_name = "io_dgram_client",
+	.ancestor = &io_d_vmt,
 	.free = io_dgram_client_free,
-	.idle = NULL,
 	.event = io_dgram_client_event_handler
 };
 
+
 /* -------------------------------------------------------------------------- */
-io_dgram_client_t *io_dgram_client_create(io_dgram_client_t *self, int family, char const *iface, io_dgram_client_handler_t *handler)
+io_dgram_client_t *io_dgram_client_create(io_dgram_client_t *self, int family, char const *iface, io_vmt_t *vmt)
 {
 	int sock = io_socket(SOCK_DGRAM, family, iface);
 	if (sock < 0)
@@ -141,9 +144,7 @@ io_dgram_client_t *io_dgram_client_create(io_dgram_client_t *self, int family, c
 	if (!self)
 		self = (io_dgram_client_t *)calloc(1, sizeof (io_dgram_client_t));
 
-	self->handler = handler;
-
-	io_d_init(&self->d, sock, POLLIN, &io_dgram_client_ops);
+	io_d_init(&self->d, sock, POLLIN, vmt);
 
 	io_queue_init(&self->queue);
 	return self;

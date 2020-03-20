@@ -55,54 +55,63 @@ static void port_cmd(io_port_t *self, char *cmd)
 
 
 /* -------------------------------------------------------------------------- */
-static int port_event_handler(io_d_t *d, int events)
+static int port_stream_pollin(io_d_t *iod)
 {
-	io_port_t *p = (io_port_t *)d;
-	if (events & POLLIN) {
-		size_t to_recv = (sizeof p->request) - (unsigned)(p->end - p->request);
-		ssize_t len;
-		do {
-			len = io_buf_sock_recv(&p->bs, p->end, to_recv, 0);
-		} while (len < 0 && errno == EINTR);
-		if (len < 0) {
-			syslog(LOG_ERR, "failed to recv (%m)");
-			return -1;
-		} else
-			if (!len) {
-				io_d_free(d); // end of connection
-				syslog(LOG_NOTICE, "<%s - %s> closed", io_sock_stoa(&p->up->conf), io_sock_stoa(&p->bs.conf));
-			} else {
-				char *cmd = p->request, *data = p->end, *lf, *end = p->end + len;
+	io_port_t *p = (io_port_t *)iod;
+	size_t to_recv = (sizeof p->request) - (unsigned)(p->end - p->request);
+	ssize_t len;
+	do {
+		len = io_buf_sock_recv(&p->bs, p->end, to_recv, 0);
+	} while (len < 0 && errno == EINTR);
+	if (len < 0) {
+		syslog(LOG_ERR, "failed to recv (%m)");
+		return -1;
+	} else
+		if (!len) {
+			io_buf_sock_free(&p->bs); // end of connection
+			syslog(LOG_NOTICE, "<%s - %s> closed", io_sock_stoa(&p->up->conf), io_sock_stoa(&p->bs.conf));
+		} else {
+			char *cmd = p->request, *data = p->end, *lf, *end = p->end + len;
 
-				while (end > data && (lf = (char *)memchr(data, '\n', (unsigned)(end - data)))) {
-					*lf++ = 0;
-					char *cr = memchr(cmd, '\r', (unsigned)(lf - cmd));
-					if (cr)
-						*cr = 0;
-					port_cmd(p, cmd);
-					data = cmd = p->end = lf;
-				}
-				if (end > data) {
-					memmove(p->request, data, (unsigned)(end - data));
-					p->end = p->request + (unsigned)(end - data);
-				} else {
-					p->end = p->request;
-				}
+			while (end > data && (lf = (char *)memchr(data, '\n', (unsigned)(end - data)))) {
+				*lf++ = 0;
+				char *cr = memchr(cmd, '\r', (unsigned)(lf - cmd));
+				if (cr)
+					*cr = 0;
+				port_cmd(p, cmd);
+				data = cmd = p->end = lf;
 			}
-	}
+			if (end > data) {
+				memmove(p->request, data, (unsigned)(end - data));
+				p->end = p->request + (unsigned)(end - data);
+			} else {
+				p->end = p->request;
+			}
+		}
 	return 0;
 }
 
 
 /* -------------------------------------------------------------------------- */
-static int port_accept(io_stream_listen_t *self)
+io_vmt_t port_stream_vmt = {
+	.class_name = "io_port_stream",
+	.ancestor = &io_stream_vmt,
+	.close  = NULL,
+	.pollin = port_stream_pollin
+};
+
+
+/* -------------------------------------------------------------------------- */
+static int port_accept(io_d_t *iod)
 {
+	io_stream_listen_t *self = (io_stream_listen_t *)iod;
+
 	io_port_t *t = (io_port_t *)calloc(1, sizeof (io_port_t));
 	t->up = self;
 
 	t->end = t->request;
 
-	if (!io_stream_accept(&t->bs, self, port_event_handler)) {
+	if (!io_stream_accept(&t->bs, self, &port_stream_vmt)) {
 		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->conf));
 		return -1;
 	} else {
@@ -112,6 +121,16 @@ static int port_accept(io_stream_listen_t *self)
 	}
 	return 0;
 }
+
+
+/* -------------------------------------------------------------------------- */
+static io_vmt_t io_port_server_vmt = {
+	.class_name = "io_port_server",
+	.ancestor = &io_stream_listen_vmt,
+	.accept = port_accept
+};
+
+
 
 /* -------------------------------------------------------------------------- */
 static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char const *iface, int queue_size)
@@ -124,7 +143,7 @@ static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char c
 	conf.sock = *sock;
 	conf.sock.port += port_offset;
 	//syslog(LOG_NOTICE, "listen: '%s'", io_sock_hosttoa(&conf));
-	/*io_stream_listen_t *self = */io_stream_listen_create(&conf, port_accept);
+	/*io_stream_listen_t *self = */io_stream_listen_create(&conf, &io_port_server_vmt);
 	return 0;
 }
 

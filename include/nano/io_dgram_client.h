@@ -6,21 +6,19 @@
 
 typedef struct io_dgram_client io_dgram_client_t;
 
-typedef
-int (io_dgram_client_handler_t)(io_dgram_client_t *self, io_sock_addr_t const *from, void *data, size_t size);
-
 
 /* -------------------------------------------------------------------------- */
 struct io_dgram_client {
 	io_d_t d;
 	io_queue_t queue;
-	io_dgram_client_handler_t *handler;
 };
 
 
 /* -------------------------------------------------------------------------- */
-io_dgram_client_t *io_dgram_client_create(io_dgram_client_t *self, int family, char const *iface, io_dgram_client_handler_t *handler);
+io_dgram_client_t *io_dgram_client_create(io_dgram_client_t *self, int family, char const *iface, io_vmt_t *vmt);
 
+
+io_vmt_t io_dgram_client_vmt;
 
 /* -------------------------------------------------------------------------- */
 /* helpers */

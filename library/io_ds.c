@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stddef.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
@@ -43,11 +44,26 @@ static char *pollevtoa(int ev)
 }
 
 /* -------------------------------------------------------------------------- */
-void io_d_init(io_d_t *self, int fd, int events, io_d_ops_t const *ops)
+static io_vmt_t *io_vmt_finish(io_vmt_t *vmt)
 {
+	if (!vmt->final && vmt->ancestor) {
+		void **up = (void **)&vmt->ancestor->free;
+		void **it = (void **)&vmt->free;
+		void **t = it, **e = it + (sizeof *vmt - offsetof(io_vmt_t, free))/sizeof vmt;
+		for (; t < e; ++t)
+			if (!*t) // method skipped
+				*t = up[t-it]; // copy method from ancestor vmt
+		vmt->final = 1;
+	}
+	return vmt;
+}
+
+/* -------------------------------------------------------------------------- */
+void io_d_init(io_d_t *self, int fd, int events, io_vmt_t *vmt)
+{
+	self->vmt = io_vmt_finish(vmt);
 	self->fd = fd;
 	self->events = events;
-	self->ops = ops;
 	self->next = io_ds;
 	io_ds = self;
 	io_ds_length += 1;
@@ -61,8 +77,7 @@ void io_d_free(io_d_t *self)
 			*s = self->next;
 			break;
 		}
-	if (self->ops->free)
-		self->ops->free(self);
+	self->vmt->free(self);
 	close(self->fd);
 	free(self);
 	io_ds_length -= 1;
@@ -90,8 +105,8 @@ int io_ds_poll(int timeout)
 
 	size_t n = 0;
 	for (io_d_t *d = io_ds; d; d = d->next) {
-		if (d->ops->idle)
-			d->ops->idle(d);
+		if (d->vmt->idle)
+			d->vmt->idle(d);
 		if (d->events) {
 			ds[n] = d;
 			fds[n].fd = d->fd;
@@ -109,7 +124,7 @@ int io_ds_poll(int timeout)
 
 	for (size_t i = 0; i < n; ++i)
 		if (fds[i].revents/* & ds[i]->events*/)
-			ds[i]->ops->event(ds[i], fds[i].revents);
+			ds[i]->vmt->event(ds[i], fds[i].revents);
 
 	return (int)n;
 }

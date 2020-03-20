@@ -78,28 +78,32 @@ int io_buf_d_event_handler(io_d_t *d, int events)
 			else
 				return -1;
 		} else
-			if (io_buf_is_empty(&b->out))
+			if (io_buf_is_empty(&b->out)) {
 				d->events &= ~POLLOUT;
+				if (d->vmt->all_sent)
+					d->vmt->all_sent(d);
+			}
 	}
-	if (events & POLLIN && b->pollin)
-		return b->pollin(d);
+	if (events & POLLIN && d->vmt->pollin)
+		return d->vmt->pollin(d);
 	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
-static const io_d_ops_t io_buf_d_ops = {
+io_vmt_t io_buf_d_vmt = {
+	.class_name = "io_buf_d",
+	.ancestor = &io_d_vmt,
 	.free = io_buf_d_free,
-	.idle = NULL,
 	.event = io_buf_d_event_handler
 };
 
 
 /* -------------------------------------------------------------------------- */
-io_buf_d_t *io_buf_d_create(io_buf_d_t *b, int fd, io_d_ops_t const *ops)
+io_buf_d_t *io_buf_d_create(io_buf_d_t *b, int fd, io_vmt_t *vmt)
 {
 	io_buf_init(&b->out);
 
-	io_d_init(&b->d, fd, POLLIN|POLLOUT, ops ?: &io_buf_d_ops);
+	io_d_init(&b->d, fd, POLLIN|POLLOUT, vmt ?: &io_buf_d_vmt);
 	return b;
 }
 

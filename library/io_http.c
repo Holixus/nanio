@@ -155,7 +155,7 @@ int io_http_req_parse(io_http_req_t *req, char const **text)
 	io_after_space(&in);
 	req->method = method;
 	req->version = io_http_match_version(&in);
-	return req->version < 0 ? (errno = EINVAL, -1) : 0;
+	return req->version < 0 ? (errno = EINVAL, -1) : (*text = in, 0);
 }
 
 
@@ -295,25 +295,26 @@ static int match_token(char const **t)
 }
 
 /* ------------------------------------------------------------------------- */
-int io_http_header_parse(io_hmap_t *h, char const *header)
+int io_http_header_parse(io_hmap_t *h, char const **header)
 {
+	char const *p = *header;
 	do {
-		io_after_space(&header);
-		char const *name = header;
-		if (!match_token(&header))
+		io_after_space(&p);
+		char const *name = p;
+		if (!match_token(&p))
 			return -1;
 
-		size_t name_len = (size_t)(header - name);
+		size_t name_len = (size_t)(p - name);
 
-		if (io_after_space(&header) != ':')
+		if (io_after_space(&p) != ':')
 			return -2;
 
-		++header;
-		io_after_space(&header);
-		char const *value = header;
+		++p;
+		io_after_space(&p);
+		char const *value = p;
 
-		char const *value_end = strstr(header, "\r\n");
-		if (value_end == header)
+		char const *value_end = strstr(p, "\r\n");
+		if (value_end == p)
 			return -3;
 
 		char const *next_line = value_end + 2;
@@ -323,9 +324,9 @@ int io_http_header_parse(io_hmap_t *h, char const *header)
 
 		if (io_hmap_addl(h, name, name_len, value, (unsigned)(value_end - value)) < 0)
 			return -4;
-		header = next_line;
-	} while (header[0] != '\r');
+		p = next_line;
+	} while (p[0] != '\r');
 
-	return header[1] != '\n' ? -5 : 0;
+	return p[1] != '\n' ? -5 : (*header = p, 0);
 }
 

@@ -50,19 +50,20 @@ static int _io_stream_connect(io_sock_addr_t *conf)
 /* -------------------------------------------------------------------------- */
 static int io_stream_listen_event_handler(io_d_t *iod, int events)
 {
-	io_stream_listen_t *p = (io_stream_listen_t *)iod;
-	return p->accept_handler(p);
+	return iod->vmt->accept(iod);
 }
 
+
 /* -------------------------------------------------------------------------- */
-static const io_d_ops_t io_stream_listen_ops = {
-	.free = NULL,
-	.idle = NULL,
+io_vmt_t io_stream_listen_vmt = {
+	.class_name = "io_stream_listen",
+	.ancestor = &io_d_vmt,
 	.event = io_stream_listen_event_handler
 };
 
+
 /* -------------------------------------------------------------------------- */
-io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_stream_accept_handler_t *handler)
+io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_vmt_t *vmt)
 {
 	int sock = io_binded_socket(SOCK_STREAM, &conf->sock, conf->iface);
 	if (sock < 0)
@@ -77,9 +78,8 @@ io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_st
 	io_stream_listen_t *self = (io_stream_listen_t *)calloc(1, sizeof (io_stream_listen_t));
 
 	self->conf = conf->sock;
-	self->accept_handler = handler;
 
-	io_d_init(&self->d, sock, POLLIN, &io_stream_listen_ops);
+	io_d_init(&self->d, sock, POLLIN, vmt);
 	return self;
 }
 
@@ -109,8 +109,8 @@ int io_stream_event_handler(io_d_t *iod, int events)
 			if (io_buf_d_event_handler(iod, events) < 0)
 				return -1;
 
-		if (s->pollin)
-			return s->pollin(iod, events);
+		if (iod->vmt->pollin)
+			return iod->vmt->pollin(iod);
 	}
 	return 0;
 }
@@ -119,18 +119,23 @@ int io_stream_event_handler(io_d_t *iod, int events)
 /* -------------------------------------------------------------------------- */
 void io_stream_free(io_d_t *d)
 {
-	io_buf_d_free(d);
+	if (d->vmt->close)
+		d->vmt->close(d);
+	d->vmt->ancestor->close(d);
 }
 
+
 /* -------------------------------------------------------------------------- */
-static const io_d_ops_t io_stream_ops = {
+io_vmt_t io_stream_vmt = {
+	.class_name = "io_stream",
+	.ancestor = &io_d_vmt,
 	.free = io_stream_free,
-	.idle = NULL,
 	.event = io_stream_event_handler
 };
 
+
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_d_event_handler_t *handler)
+io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_vmt_t *vmt)
 {
 	io_sock_addr_t conf;
 	int sd;
@@ -160,14 +165,13 @@ io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_d_ev
 		t->conf = conf;
 
 	t->connecting = 0;
-	t->pollin = handler;
 
-	io_buf_d_create(&t->bd, sd, &io_stream_ops);
+	io_buf_d_create(&t->bd, sd, vmt ?: &io_stream_vmt);
 	return t;
 }
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_d_event_handler_t *handler)
+io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_vmt_t *vmt)
 {
 	int fd = _io_stream_connect(conf);
 	if (fd < 0)
@@ -178,8 +182,7 @@ io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_d_ev
 
 	t->connecting = 1;
 	t->conf = *conf;
-	t->pollin = handler;
 
-	io_buf_d_create(&t->bd, fd, &io_stream_ops);
+	io_buf_d_create(&t->bd, fd, vmt);
 	return t;
 }
