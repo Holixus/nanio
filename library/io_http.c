@@ -106,13 +106,20 @@ static int digit2num(char digit)
 }
 
 /* ------------------------------------------------------------------------- */
-static int match_dec(char const **text)
+static int io_http_match_status_code(char const **text)
 {
 	char const *in = *text;
-	int num = 0, dig;
-	while ((dig = digit2num(*in)) < 10)
-		(num = dig + 10 * num), ++in;
-	return *text = in, num;
+
+	int c = 3, code = 0;
+	do {
+		int dig = digit2num(*in);
+		if (dig >= 10)
+			return -1;
+		code = dig + 10 * code;
+		++in;
+	} while (--c);
+
+	return *in == ' ' ? *text = in, code : -1;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -123,12 +130,11 @@ static int io_http_match_version(char const **text)
 	if (in[0] != 'H' && in[1] != 'T' && in[2] != 'T' && in[3] != 'P' && in[4] != '/')
 		return -1;
 	in += 5;
-	int major = match_dec(&in);
-	if (*in != '.')
+	int major = digit2num(*in);
+	if (major >= 10 || in[1] != '.')
 		return -1;
-	++in;
-	int minor = match_dec(&in);
-	return *text = in, major * 0x100 + minor;
+	int minor = digit2num(in[2]);
+	return minor < 10 ? *text = in + 3, major * 0x100 + minor: -1;
 }
 
 /* ------------------------------------------------------------------------- */
@@ -160,15 +166,36 @@ int io_http_req_parse(io_http_req_t *req, char const **text)
 
 
 /* ------------------------------------------------------------------------- */
-char const *io_http_code(int code)
+int io_http_resp_parse(io_http_resp_t *resp, char const **text)
+{
+	char const *in = *text;
+
+	int version = io_http_match_version(&in);
+	if (version < 0)
+		return errno = EINVAL, -1;
+
+	io_after_space(&in);
+	int status = io_http_match_status_code(&in);
+	if (status < 0)
+		return errno = EINVAL, -1;
+
+	resp->status = status;
+	resp->version = version;
+
+	char const *status_line_end = strstr(in, "\r\n");
+	return status_line_end ? *text = status_line_end + 2, status : -1;
+}
+
+/* ------------------------------------------------------------------------- */
+char const *io_http_resp_status(int status)
 {
 typedef
-struct _http_code {
-	int code;
+struct _http_status {
+	int status;
 	char const *message;
-} http_code_t;
+} http_status_t;
 
-	static const http_code_t codes[] = {
+	static const http_status_t statuses[] = {
 		{ 101, "Switching Protocols" },
 		{ 200, "Data follows" },
 		{ 204, "No Content" },
@@ -190,20 +217,20 @@ struct _http_code {
 		{ 503, "Service Unavailable" }
 	};
 
-	const http_code_t *left = codes, *right = codes + countof(codes);
+	const http_status_t *left = statuses, *right = statuses + countof(statuses);
 
 	while (right - left > 1) {
-		const http_code_t *middle = left + (right-left)/2;
-		if (middle->code == code)
+		const http_status_t *middle = left + (right-left)/2;
+		if (middle->status == status)
 			return middle->message;
 
-		if (middle->code < code)
+		if (middle->status < status)
 			left = middle;
 		else
 			right = middle;
 	}
 
-	if (left->code == code)
+	if (left->status == status)
 		return left->message;
 
 	return "";
