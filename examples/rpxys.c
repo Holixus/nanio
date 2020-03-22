@@ -66,7 +66,7 @@ static int proxy_process_request(http_con_t *c)
 {
 	switch (c->req.method) {
 	case HTTP_CONNECT:
-	default:
+	default:;
 	}
 
 	syslog(LOG_NOTICE, "<%s> %s %s HTTP/%d.%d", io_sock_stoa(&c->bs.conf), io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
@@ -154,19 +154,32 @@ io_vmt_t proxy_stream_vmt = {
 
 
 /* -------------------------------------------------------------------------- */
+typedef
+struct proxy_server {
+	io_stream_listen_t ls;
+	unsigned int next_con_id;
+} proxy_server_t;
+
+/* -------------------------------------------------------------------------- */
+static int proxy_server_con_id(proxy_server_t *ps)
+{
+	return ps->next_con_id++;
+}
+
+/* -------------------------------------------------------------------------- */
 static int proxy_accept(io_d_t *iod)
 {
-	io_stream_listen_t *self = (io_stream_listen_t *)iod;
+	proxy_server_t *self = (proxy_server_t *)iod;
 	http_con_t *t = (http_con_t *)calloc(1, sizeof (http_con_t));
 
-	t->id = connection_id();
+	t->id = proxy_server_con_id(self);
 	t->end = t->req_hdr;
 
-	if (!io_stream_accept(&t->bs, self, &proxy_stream_vmt)) {
-		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->conf));
+	if (!io_stream_accept(&t->bs, &self->ls, &proxy_stream_vmt)) {
+		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->ls.conf));
 		return -1;
 	} else {
-		char const *sid = io_sock_stoa(&self->conf);
+		char const *sid = io_sock_stoa(&self->ls.conf);
 		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->bs.conf));
 	}
 	return 0;
@@ -192,7 +205,7 @@ static int proxy_server_create(io_sock_addr_t *sock, int queue_size)
 	conf.sock = *sock;
 	syslog(LOG_NOTICE, "listen: '%s'", io_sock_stoa(sock));
 	proxy_server_t *self = (proxy_server_t *)calloc(1, sizeof (proxy_server_t));
-	/*io_sock_listen_t *self = */io_stream_listen_create(self, &conf, &io_proxy_server_vmt);
+	/*io_sock_listen_t *self = */io_stream_listen_create(&self->ls, &conf, &io_proxy_server_vmt);
 	return 0;
 }
 
