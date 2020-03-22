@@ -32,10 +32,10 @@ struct io_buf_sock {
 
 
 /* -------------------------------------------------------------------------- */
-io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_vmt_t *vmt);
+io_stream_listen_t *io_stream_listen_create(io_stream_listen_t *s, io_stream_listen_conf_t *conf, io_vmt_t *vmt);
 
-io_buf_sock_t *io_stream_accept (io_buf_sock_t *t, io_stream_listen_t *s, io_vmt_t *vmt);
-io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_vmt_t *vmt);
+io_buf_sock_t *io_stream_accept (io_buf_sock_t *s, io_stream_listen_t *s, io_vmt_t *vmt);
+io_buf_sock_t *io_stream_connect(io_buf_sock_t *s, io_sock_addr_t *conf, io_vmt_t *vmt);
 
 
 /* -------------------------------------------------------------------------- */

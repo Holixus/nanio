@@ -123,8 +123,10 @@ int io_ds_poll(int timeout)
 		return ret;
 
 	for (size_t i = 0; i < n; ++i)
-		if (fds[i].revents/* & ds[i]->events*/)
+		if (fds[i].revents/* & ds[i]->events*/) {
+			printf("[%s] event %s\n", ds[i]->vmt->name, pollevtoa(fds[i].revents));
 			ds[i]->vmt->event(ds[i], fds[i].revents);
+		}
 
 	return (int)n;
 }

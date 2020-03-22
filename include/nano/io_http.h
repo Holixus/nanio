@@ -3,11 +3,11 @@
 
 typedef
 enum {
-	HTTP_ERROR = 0, HTTP_CONNECT, HTTP_DELETE, 
-	HTTP_GET, HTTP_HEAD, HTTP_OPTIONS, 
+	HTTP_ERROR = 0, HTTP_CONNECT, HTTP_DELETE,
+	HTTP_GET, HTTP_HEAD, HTTP_OPTIONS,
 	HTTP_PATCH, HTTP_POST, HTTP_PUT,
 	HTTP_TRACE
-} http_req_type_t;
+} http_req_method_t;
 
 typedef
 enum {
@@ -41,6 +41,7 @@ struct io_http_req_info {
 
 
 char const *io_http_code(int code);
+char const *io_http_req_method(int method);
 
 size_t io_url_decoded_length(char const *encoded_url);
 size_t io_url_encoded_length(char const *url);

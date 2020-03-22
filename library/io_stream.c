@@ -50,20 +50,20 @@ static int _io_stream_connect(io_sock_addr_t *conf)
 /* -------------------------------------------------------------------------- */
 static int io_stream_listen_event_handler(io_d_t *iod, int events)
 {
-	return iod->vmt->accept(iod);
+	return iod->vmt->u.stream.accept(iod);
 }
 
 
 /* -------------------------------------------------------------------------- */
 io_vmt_t io_stream_listen_vmt = {
-	.class_name = "io_stream_listen",
+	.name = "io_stream_listen",
 	.ancestor = &io_d_vmt,
 	.event = io_stream_listen_event_handler
 };
 
 
 /* -------------------------------------------------------------------------- */
-io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_vmt_t *vmt)
+io_stream_listen_t *io_stream_listen_create(io_stream_listen_t *self, io_stream_listen_conf_t *conf, io_vmt_t *vmt)
 {
 	int sock = io_binded_socket(SOCK_STREAM, &conf->sock, conf->iface);
 	if (sock < 0)
@@ -75,7 +75,8 @@ io_stream_listen_t *io_stream_listen_create(io_stream_listen_conf_t *conf, io_vm
 		return NULL;
 	}
 
-	io_stream_listen_t *self = (io_stream_listen_t *)calloc(1, sizeof (io_stream_listen_t));
+	if (!self)
+		self = (io_stream_listen_t *)calloc(1, sizeof (io_stream_listen_t));
 
 	self->conf = conf->sock;
 
@@ -104,13 +105,17 @@ int io_stream_event_handler(io_d_t *iod, int events)
 			} else {
 				if (!err)
 					s->connecting = 0;
+				else
+					return 0; // not connected yet
 			}
-		} else
-			if (io_buf_d_event_handler(iod, events) < 0)
-				return -1;
+		}
 
-		if (iod->vmt->pollin)
-			return iod->vmt->pollin(iod);
+		if (iod->vmt->u.stream.recv) {
+			if (iod->vmt->u.stream.recv(iod) < 0) {
+				io_d_free(iod);
+				return -1;
+			}
+		}
 	}
 	return 0;
 }
@@ -119,15 +124,16 @@ int io_stream_event_handler(io_d_t *iod, int events)
 /* -------------------------------------------------------------------------- */
 void io_stream_free(io_d_t *d)
 {
-	if (d->vmt->close)
-		d->vmt->close(d);
-	d->vmt->ancestor->close(d);
+	if (d->vmt->u.stream.close)
+		d->vmt->u.stream.close(d);
+	if (d->vmt->ancestor->u.stream.close)
+		d->vmt->ancestor->u.stream.close(d);
 }
 
 
 /* -------------------------------------------------------------------------- */
 io_vmt_t io_stream_vmt = {
-	.class_name = "io_stream",
+	.name = "io_stream",
 	.ancestor = &io_d_vmt,
 	.free = io_stream_free,
 	.event = io_stream_event_handler

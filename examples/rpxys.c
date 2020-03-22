@@ -29,26 +29,18 @@
 #include "nano/io_http.h"
 
 enum {
-	CON_HTTP,
-	CON_REVERSE,
-	CON_CLOSE
-};
-
-enum {
 	ST_RECV_HEADER,
-	ST_PIPE
+	ST_PIPE,
+	ST_FORWARDING,
+	ST_CLOSE
 };
 
-typedef
-struct http_header_kv {
-	char *key, *value;
-} header_kv_t;
 
 typedef
-struct io_proxy_con {
+struct io_http_con {
 	io_buf_sock_t bs;
-	int type; // CON_HTTP | CON_REVERSE
-	int state; // 
+	unsigned int id;
+	int state;
 
 	char *end;
 	char const *header, *body;
@@ -57,24 +49,27 @@ struct io_proxy_con {
 	io_hmap_t *params;
 
 	char req_hdr[8000];
-} proxy_con_t;
+} http_con_t;
 
 
 /* -------------------------------------------------------------------------- */
-static int http_empty_response(proxy_con_t *c, int code)
+static int http_empty_response(http_con_t *c, int code)
 {
 	io_buf_sock_writef(&c->bs, "HTTP/%d.%d %03d %s\r\nConnection: close\r\nContent-Length: 0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n", c->req.version >> 8, c->req.version & 255, code, io_http_code(code));
-	c->state = CON_CLOSE;
+	c->state = ST_CLOSE;
 	return 0;
 }
 
 
 /* -------------------------------------------------------------------------- */
-static int proxy_process_request(proxy_con_t *c)
+static int proxy_process_request(http_con_t *c)
 {
-	if (c->req.method == HTTP_GET) {
-		syslog(LOG_NOTICE, "GET %s HTTP/%d.%d", c->req.path, c->req.version >> 8, c->req.version & 255);
+	switch (c->req.method) {
+	case HTTP_CONNECT:
+	default:
 	}
+
+	syslog(LOG_NOTICE, "<%s> %s %s HTTP/%d.%d", io_sock_stoa(&c->bs.conf), io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
 	http_empty_response(c, HTTP_NO_CONTENT);
 	return 0;
 }
@@ -83,7 +78,7 @@ static int proxy_process_request(proxy_con_t *c)
 /* -------------------------------------------------------------------------- */
 static int proxy_stream_close(io_d_t *iod)
 {
-	proxy_con_t *c = (proxy_con_t *)iod;
+	http_con_t *c = (http_con_t *)iod;
 	if (c->params)
 		free(c->params);
 	return 0;
@@ -92,27 +87,34 @@ static int proxy_stream_close(io_d_t *iod)
 /* -------------------------------------------------------------------------- */
 static int proxy_all_sent_handler(io_d_t *iod)
 {
-	proxy_con_t *c = (proxy_con_t *)iod;
-	if (c->state == CON_CLOSE)
+	http_con_t *c = (http_con_t *)iod;
+	syslog(LOG_NOTICE, "<%s> all_sent", io_sock_stoa(&c->bs.conf));
+	if (c->state == ST_CLOSE) {
 		io_d_free(iod); // end of connection
+		syslog(LOG_NOTICE, "<%s> .. close", io_sock_stoa(&c->bs.conf));
+	}
 	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
-static int proxy_stream_pollin(io_d_t *iod)
+static int proxy_stream_recv(io_d_t *iod)
 {
-	proxy_con_t *c = (proxy_con_t *)iod;
+	http_con_t *c = (http_con_t *)iod;
+	//syslog(LOG_NOTICE, "<%s> recv [%d]", io_sock_stoa(&c->bs.conf), c->state);
 	if (c->state == ST_RECV_HEADER) {
 		size_t to_recv = (unsigned)(sizeof c->req_hdr - 1 - (c->end - c->req_hdr));
 		ssize_t len;
 		do {
 			len = io_buf_sock_recv(&c->bs, c->end, to_recv, 0);
 		} while (len < 0 && errno == EINTR);
-		if (len < 0)
+		if (len < 0) {
+			syslog(LOG_ERR, "<%s> recv failed: %m", io_sock_stoa(&c->bs.conf));
 			return -1;
+		}
 		if (!len) {
 			io_buf_sock_free(&c->bs); // end of connection
 			syslog(LOG_NOTICE, "<%s> closed", io_sock_stoa(&c->bs.conf));
+			return 0;
 		}
 		c->end[len] = 0;
 		int has_body = !!strstr(c->end, "\r\n\r\n");
@@ -141,10 +143,13 @@ static int proxy_stream_pollin(io_d_t *iod)
 
 /* -------------------------------------------------------------------------- */
 io_vmt_t proxy_stream_vmt = {
-	.class_name = "io_proxy_stream",
+	.name = "io_proxy_stream",
 	.ancestor = &io_stream_vmt,
-	.close  = proxy_stream_close,
-	.pollin = proxy_stream_pollin
+	.u.stream = {
+		.close    = proxy_stream_close,
+		.recv  = proxy_stream_recv,
+		.all_sent = proxy_all_sent_handler
+	}
 };
 
 
@@ -152,8 +157,9 @@ io_vmt_t proxy_stream_vmt = {
 static int proxy_accept(io_d_t *iod)
 {
 	io_stream_listen_t *self = (io_stream_listen_t *)iod;
-	proxy_con_t *t = (proxy_con_t *)calloc(1, sizeof (proxy_con_t));
+	http_con_t *t = (http_con_t *)calloc(1, sizeof (http_con_t));
 
+	t->id = connection_id();
 	t->end = t->req_hdr;
 
 	if (!io_stream_accept(&t->bs, self, &proxy_stream_vmt)) {
@@ -169,9 +175,11 @@ static int proxy_accept(io_d_t *iod)
 
 /* -------------------------------------------------------------------------- */
 static io_vmt_t io_proxy_server_vmt = {
-	.class_name = "io_proxy_server",
+	.name = "io_proxy_server",
 	.ancestor = &io_stream_listen_vmt,
-	.accept = proxy_accept
+	.u.stream = {
+		.accept = proxy_accept
+	}
 };
 
 /* -------------------------------------------------------------------------- */
@@ -183,7 +191,8 @@ static int proxy_server_create(io_sock_addr_t *sock, int queue_size)
 	conf.iface[0] = 0;
 	conf.sock = *sock;
 	syslog(LOG_NOTICE, "listen: '%s'", io_sock_stoa(sock));
-	/*io_sock_listen_t *self = */io_stream_listen_create(&conf, &io_proxy_server_vmt);
+	proxy_server_t *self = (proxy_server_t *)calloc(1, sizeof (proxy_server_t));
+	/*io_sock_listen_t *self = */io_stream_listen_create(self, &conf, &io_proxy_server_vmt);
 	return 0;
 }
 

@@ -55,7 +55,7 @@ static void port_cmd(io_port_t *self, char *cmd)
 
 
 /* -------------------------------------------------------------------------- */
-static int port_stream_pollin(io_d_t *iod)
+static int port_stream_recv(io_d_t *iod)
 {
 	io_port_t *p = (io_port_t *)iod;
 	size_t to_recv = (sizeof p->request) - (unsigned)(p->end - p->request);
@@ -94,10 +94,12 @@ static int port_stream_pollin(io_d_t *iod)
 
 /* -------------------------------------------------------------------------- */
 io_vmt_t port_stream_vmt = {
-	.class_name = "io_port_stream",
+	.name = "io_port_stream",
 	.ancestor = &io_stream_vmt,
-	.close  = NULL,
-	.pollin = port_stream_pollin
+	.u.stream = {
+		.close  = NULL,
+		.recv = port_stream_recv
+	}
 };
 
 
@@ -125,9 +127,11 @@ static int port_accept(io_d_t *iod)
 
 /* -------------------------------------------------------------------------- */
 static io_vmt_t io_port_server_vmt = {
-	.class_name = "io_port_server",
+	.name = "io_port_server",
 	.ancestor = &io_stream_listen_vmt,
-	.accept = port_accept
+	.u.stream = {
+		.accept = port_accept
+	}
 };
 
 
@@ -143,7 +147,7 @@ static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char c
 	conf.sock = *sock;
 	conf.sock.port += port_offset;
 	//syslog(LOG_NOTICE, "listen: '%s'", io_sock_hosttoa(&conf));
-	/*io_stream_listen_t *self = */io_stream_listen_create(&conf, &io_port_server_vmt);
+	/*io_stream_listen_t *self = */io_stream_listen_create(NULL, &conf, &io_port_server_vmt);
 	return 0;
 }
 

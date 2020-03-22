@@ -210,6 +210,24 @@ struct _http_code {
 }
 
 /* ------------------------------------------------------------------------- */
+char const *io_http_req_method(int method)
+{
+	switch (method) {
+	case HTTP_ERROR:   return "ERROR";
+	case HTTP_CONNECT: return "CONNECT";
+	case HTTP_DELETE:  return "DELETE";
+	case HTTP_GET:     return "GET";
+	case HTTP_HEAD:    return "HEAD";
+	case HTTP_OPTIONS: return "OPTIONS";
+	case HTTP_PATCH:   return "PATCH";
+	case HTTP_POST:    return "POST";
+	case HTTP_PUT:     return "PUT";
+	case HTTP_TRACE:   return "TRACE";
+	}
+	return "";
+}
+
+/* ------------------------------------------------------------------------- */
 size_t io_url_decoded_length(char const *encoded_url)
 {
 	char const *p = encoded_url;

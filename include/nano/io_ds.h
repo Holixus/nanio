@@ -11,17 +11,23 @@ typedef struct io_vmt io_vmt_t;
 
 /* -------------------------------------------------------------------------- */
 struct io_vmt {
-	char const *class_name;
+	char const *name;
 	io_vmt_t *ancestor;
 	int final;
 	void (*free    )(io_d_t *d);
 	void (*idle    )(io_d_t *d);
 	int  (*event   )(io_d_t *d, int events);
-	int  (*accept  )(io_d_t *d);
-	int  (*pollin  )(io_d_t *d);
-	int  (*all_sent)(io_d_t *d);
-	int  (*close   )(io_d_t *d);
-	int  (*recvd   )(io_d_t *d, io_sock_addr_t const *from, void *data, size_t size); // datagram packet received
+	union {
+		struct {
+			int  (*accept  )(io_d_t *d);
+			int  (*recv    )(io_d_t *d);
+			int  (*all_sent)(io_d_t *d);
+			int  (*close   )(io_d_t *d);
+		} stream;
+		struct {
+			int  (*recvd   )(io_d_t *d, io_sock_addr_t const *from, void *data, size_t size); // datagram packet received
+		} dgram;
+	} u;
 };
 
 #define io_inherited   vmt->ancestor

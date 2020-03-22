@@ -109,13 +109,13 @@ static int io_dgram_client_event_handler(io_d_t *iod, int events)
 			iod->events &= ~POLLOUT;
 	}
 
-	if (events & POLLIN && iod->vmt->recvd) {
+	if (events & POLLIN && iod->vmt->u.dgram.recvd) {
 		io_sock_addr_t addr;
 		char buf[1500];
 
 		ssize_t recvd = io_dgram_recv(iod, &addr, buf, sizeof buf);
 		if (recvd > 0)
-			iod->vmt->recvd(iod, &addr, buf, recvd);
+			iod->vmt->u.dgram.recvd(iod, &addr, buf, recvd);
 		else
 			if (recvd < 0)
 				return -1;
@@ -127,7 +127,7 @@ static int io_dgram_client_event_handler(io_d_t *iod, int events)
 
 /* -------------------------------------------------------------------------- */
 io_vmt_t io_dgram_client_vmt = {
-	.class_name = "io_dgram_client",
+	.name = "io_dgram_client",
 	.ancestor = &io_d_vmt,
 	.free = io_dgram_client_free,
 	.event = io_dgram_client_event_handler
