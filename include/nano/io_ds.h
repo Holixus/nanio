@@ -46,6 +46,8 @@ struct io_d {
 void io_d_init(io_d_t *self, int fd, int events, io_vmt_t *vmt);
 void io_d_free(io_d_t *self);
 
+/* -------------------------------------------------------------------------- */
+ssize_t io_d_recv(io_d_t *self, void *buf, size_t len);
 
 io_vmt_t io_d_vmt;
 

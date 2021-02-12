@@ -97,6 +97,16 @@ void io_ds_free()
 }
 
 /* -------------------------------------------------------------------------- */
+ssize_t io_d_recv(io_d_t *self, void *buf, size_t len)
+{
+	ssize_t rcvd;
+	do {
+		rcvd = recv(self->fd, buf, len, 0);
+	} while (rcvd < 0 && errno == EINTR);
+	return rcvd;
+}
+
+/* -------------------------------------------------------------------------- */
 int io_ds_poll(int timeout)
 {
 	size_t len = io_ds_length;

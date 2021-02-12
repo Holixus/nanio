@@ -103,10 +103,7 @@ static int proxy_stream_recv(io_d_t *iod)
 	//syslog(LOG_NOTICE, "<%s> recv [%d]", io_sock_stoa(&c->bs.conf), c->state);
 	if (c->state == ST_RECV_HEADER) {
 		size_t to_recv = (unsigned)(sizeof c->req_hdr - 1 - (c->end - c->req_hdr));
-		ssize_t len;
-		do {
-			len = io_buf_sock_recv(&c->bs, c->end, to_recv, 0);
-		} while (len < 0 && errno == EINTR);
+		ssize_t len = io_buf_sock_recv(&c->bs, c->end, to_recv);
 		if (len < 0) {
 			syslog(LOG_ERR, "<%s> recv failed: %m", io_sock_stoa(&c->bs.conf));
 			return -1;

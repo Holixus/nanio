@@ -50,7 +50,7 @@ int io_stream_event_handler(io_d_t *iod, int events);
 /* helpers */
 
 #define io_buf_sock_free(bs)                 io_d_free(&(bs)->bd.d)
-#define io_buf_sock_recv(bs, b, s, f)        recv((bs)->bd.d.fd, b, s, f)
+#define io_buf_sock_recv(bs, b, s)           io_d_recv(&(bs)->bd.d, b, s)
 
 #define io_buf_sock_vwritef(t, fmt, ap)      io_buf_d_vwritef(&(t)->bd.d, fmt, ap)
 #define io_buf_sock_write(t, data, size)     io_buf_d_write(&(t)->bd.d, data, size)

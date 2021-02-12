@@ -59,10 +59,7 @@ static int port_stream_recv(io_d_t *iod)
 {
 	io_port_t *p = (io_port_t *)iod;
 	size_t to_recv = (sizeof p->request) - (unsigned)(p->end - p->request);
-	ssize_t len;
-	do {
-		len = io_buf_sock_recv(&p->bs, p->end, to_recv, 0);
-	} while (len < 0 && errno == EINTR);
+	ssize_t len = io_buf_sock_recv(&p->bs, p->end, to_recv);
 	if (len < 0) {
 		syslog(LOG_ERR, "failed to recv (%m)");
 		return -1;
