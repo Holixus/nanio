@@ -147,8 +147,8 @@ int io_get_timeout()
 		if (t->period)
 			while ((t->next_time += t->period) <= now);
 		else
-			io_timer_free(t);
-		t->handler(t->custom);
+			io_timer_free(t);  // timer will not be cleaned but only moved to free list
+		t->handler(t->custom); // it's safe(yet) to handle free timer at the place
 	} while (1);
 
 	return (int)(t->next_time - now);
