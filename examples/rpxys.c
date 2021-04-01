@@ -55,7 +55,12 @@ struct io_http_con {
 /* -------------------------------------------------------------------------- */
 static int http_empty_response(http_con_t *c, int status)
 {
-	io_buf_sock_writef(&c->bs, "HTTP/%d.%d %03d %s\r\nConnection: close\r\nContent-Length: 0\r\nContent-Type: text/html; charset=UTF-8\r\n\r\n", c->req.version >> 8, c->req.version & 255, status, io_http_resp_status(status));
+	io_buf_sock_writef(&c->bs, "\
+HTTP/%d.%d %03d %s\r\n\
+Connection: close\r\n\
+Content-Length: 0\r\n\
+Content-Type: text/html; charset=UTF-8\r\n\
+\r\n", c->req.version >> 8, c->req.version & 255, status, io_http_resp_status(status));
 	c->state = ST_CLOSE;
 	return 0;
 }
