@@ -121,7 +121,7 @@ char const *ipv6_stoa(uint16_t const ip[8], int port)
 	*p++ = '[';
 	inet_ntop(AF_INET6, n, p, INET6_ADDRSTRLEN);
 	p = strchr(p, 0);
-	sprintf(p, "]:%d", port);
+	sprintf(p, "/%d]", port);
 	return s;
 }
 

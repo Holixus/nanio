@@ -53,9 +53,11 @@ struct io_sock_addr {
 
 /* -------------------------------------------------------------------------- */
 /* socket address helpers */
+// just address (like as "/tmp/unix.sock", "127.0.0.1", "fe00::0")
 int io_sock_atohost(io_sock_addr_t *host, char const *a);
 char const *io_sock_hostoa(io_sock_addr_t const *sc);
 
+// address with port (like as "/tmp/unix.sock", "127.0.0.1:80", "[fe00::0/80]")
 int io_sock_atos(io_sock_addr_t *host, char const *a); // ascii to sock
 char const *io_sock_stoa(io_sock_addr_t const *sc);    // sock to ascii
 
