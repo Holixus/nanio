@@ -14,18 +14,17 @@ SET(CMAKE_C_FLAGS_DEBUG   "-O0 -g3")
 SET(CMAKE_LD_FLAGS_RELEASE "-Os -Werror -ffast-math -fmerge-all-constants -ffunction-sections -fdata-sections -fno-asynchronous-unwind-tables -fvisibility=hidden")
 
 
-foreach(prog_name "sock-echo" "rpxys")
+foreach(prog_name "sock-echo" "rpxys" "multi_server")
 	ADD_EXECUTABLE(${prog_name} ${prog_name}.c)
-TARGET_LINK_LIBRARIES(${prog_name} nanio_static)
+	TARGET_LINK_LIBRARIES(${prog_name} nanio_static)
 
-#SET_TARGET_PROPERTIES(${prog_name} PROPERTIES COMPILE_FLAGS -fvisibility=hidden)
-SET_TARGET_PROPERTIES(${prog_name} PROPERTIES LINK_FLAGS_RELEASE -Wl,--gc-sections,--build-id=none)
+	#SET_TARGET_PROPERTIES(${prog_name} PROPERTIES COMPILE_FLAGS -fvisibility=hidden)
+	SET_TARGET_PROPERTIES(${prog_name} PROPERTIES LINK_FLAGS_RELEASE -Wl,--gc-sections,--build-id=none)
 
 
-INSTALL(TARGETS ${prog_name}
-	ARCHIVE DESTINATION lib
-	LIBRARY DESTINATION lib
-	RUNTIME DESTINATION bin
-)
-
+	INSTALL(TARGETS ${prog_name}
+		ARCHIVE DESTINATION lib
+		LIBRARY DESTINATION lib
+		RUNTIME DESTINATION bin
+	)
 endforeach()

@@ -63,7 +63,6 @@ static void nslookup_create(char const *domain, io_sock_addr_t const *servs, int
 	req->servers_num = servs_num;
 
 	io_dgram_client_create(&req->c, serv->family, NULL, io_nslookup_recv_handler);
-
 }
 
 
