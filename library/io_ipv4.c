@@ -88,15 +88,21 @@ char const *ipv4_stoa(unsigned int num, int port)
 	return buf;
 }
 
-
 /* ------------------------------------------------------------------------ */
-unsigned int ipv4_atoi(char const *ip)
+unsigned int ipv4_strtoi(char const *ip, char const **after)
 {
-	unsigned int num = 0, c = 4;
-	goto _start;
+	if (!ip)
+		return 0;
+
+	unsigned int num = 0, sub = *ip == '.', c = sub ? 3 : 4;
+	if (!sub)
+		goto _start;
 	do {
-		if (*ip != '.')
+		if (*ip != '.') {
+			if (sub)
+				break;
 			return 0;
+		}
 		++ip;
 _start:;
 		char const *next;
@@ -107,29 +113,16 @@ _start:;
 		num = num << 8 | n;
 	} while (--c);
 
+	if (after)
+		*after = ip;
 	return num;
 }
 
 
 /* ------------------------------------------------------------------------ */
-char const *ipv4_aton(unsigned char *n, char const *a)
+unsigned int ipv4_atoi(char const *ip)
 {
-	unsigned int c = 4;
-	goto _start;
-	do {
-		if (*a != '.')
-			return NULL;
-		++a;
-_start:;
-		char const *next;
-		unsigned long v = strtoul(a, (char **)&next, 10);
-		if (next == a || v >= 256)
-			return NULL;
-		a = next;
-		*n++ = (unsigned char)v;
-	} while (--c);
-
-	return a;
+	return ipv4_strtoi(ip, NULL);
 }
 
 
@@ -233,21 +226,22 @@ unsigned int ipv4_netbits(uint32_t ip)
 	unsigned bits = ip >> 29 < 4 ? 8 : (ip >> 29 < 5 ? 16 : 24);
 
 	if (bits == 8) // 100.64.0.0/10
-		return (ip & 0xFFC00000 == 0x64400000) ? 10 : bits;
+		return (ip & 0xFFC00000) == 0x64400000 ? 10 : bits;
 
 	switch (ip >> 24) {
 	case 169: // 169.254.0.0/16
-		return (ip & 0xFF0000 == 0xFE0000) ? 16 : bits;
+		return (ip & 0xFF0000) == 0xFE0000 ? 16 : bits;
 	case 172: // 172.16.0.0/12
-		return (ip & 0xF00000 == 0x100000) ? 12 : bits;
+		return (ip & 0xF00000) == 0x100000 ? 12 : bits;
 	case 192: // 192.168.0.0/16
-		return (ip & 0xFFFF00) == 0xA80000) ? 16 : bits;
+		return (ip & 0xFFFF00) == 0xA80000 ? 16 : bits;
 	case 198: // 198.18.0.0/15
-		return (ip & 0xFFFF00) == 0x120000) ? 15 : bits;
+		return (ip & 0xFFFF00) == 0x120000 ? 15 : bits;
 	case 224:
 	case 240:
 		return 4; // multicast
 	case 255: // broadcast
-		return (ip & 0xFFFFFF) == 0xFFFFFF) ? 1 : bits;
+		return (ip & 0xFFFFFF) == 0xFFFFFF ? 1 : bits;
 	}
+	return bits;
 }
