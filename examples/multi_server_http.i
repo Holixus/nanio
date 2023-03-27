@@ -29,6 +29,10 @@ static void http_end(http_con_t *c)
 	int keep_alive = conn_type && strcmp(conn_type, "keep-alive") ? 1 : 0;
 
 	c->state = keep_alive ? ST_RECV_HEADER : ST_CLOSE;
+	if (keep_alive) {
+		c->end = c->req_hdr;
+		c->header = c->body = NULL;
+	}
 }
 
 
@@ -94,10 +98,12 @@ static int http_con_process_request(http_con_t *c)
 static int v_http_con_close(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
+	debug("%s <%s> real close (free params)", iod->vmt->name, io_sock_stoa(&c->bs.conf));
 	if (c->params)
 		free(c->params);
 	return 0;
 }
+
 
 /* -------------------------------------------------------------------------- */
 static int v_http_con_all_sent(io_d_t *iod)
@@ -105,11 +111,11 @@ static int v_http_con_all_sent(io_d_t *iod)
 	http_con_t *c = (http_con_t *)iod;
 	debug("%s <%s> all_sent", iod->vmt->name, io_sock_stoa(&c->bs.conf));
 	if (c->state == ST_CLOSE) {
-		debug("%s <%s> .. close", iod->vmt->name, io_sock_stoa(&c->bs.conf));
 		io_d_free(iod); // end of connection
 	}
 	return 0;
 }
+
 
 /* -------------------------------------------------------------------------- */
 static int v_http_con_recv(io_d_t *iod)
@@ -159,7 +165,6 @@ static int v_http_con_recv(io_d_t *iod)
 	}
 	return 0;
 }
-
 
 
 /* -------------------------------------------------------------------------- */
