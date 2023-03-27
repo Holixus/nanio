@@ -17,7 +17,7 @@ struct io_map {
 } io_map_t;
 
 /* ------------------------------------------------------------------------ */
-io_map_t *io_map_create(size_t keys_limit);
+io_map_t *io_map_create(io_map_t *m, size_t keys_limit);
 
 int io_map_add(io_map_t *m, char const *key, char const *value);
 //int io_map_addl(io_map_t *m, char *key, size_t key_size, char *value, size_t value_size);
@@ -34,7 +34,7 @@ struct io_kvs {
 } io_hmap_t;
 
 /* ------------------------------------------------------------------------ */
-io_hmap_t *io_hmap_create(size_t keys_limit, size_t heap_size);
+io_hmap_t *io_hmap_create(io_hmap_t *m, size_t keys_limit, size_t heap_size);
 
 int io_hmap_add(io_hmap_t *h, char const *key, char const *value);
 int io_hmap_addl(io_hmap_t *h, char const *key, size_t key_len, char const *value, size_t value_len);

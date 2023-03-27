@@ -129,7 +129,7 @@ static int proxy_stream_recv(io_d_t *iod)
 			return http_empty_response(c, HTTP_BAD_REQUEST);
 
 		c->header = s;
-		c->params = io_hmap_create(48, 8192);
+		c->params = io_hmap_create(c->params, 48, 8192);
 		if (io_http_header_parse(c->params, &s) < 0)
 			return http_empty_response(c, HTTP_BAD_REQUEST);
 

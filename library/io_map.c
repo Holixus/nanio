@@ -22,9 +22,11 @@
 
 
 /* ------------------------------------------------------------------------ */
-io_map_t *io_map_create(size_t keys_limit)
+io_map_t *io_map_create(io_map_t *m, size_t keys_limit)
 {
-	io_map_t *m = malloc(sizeof m->kvs[0] * keys_limit + sizeof *m);
+	if (!m)
+		m = malloc(sizeof m->kvs[0] * keys_limit + sizeof *m);
+
 	m->last = m->kvs;
 	m->kend = m->kvs + keys_limit;
 	return m;
@@ -84,13 +86,14 @@ int io_map_addl(io_map_t *m, char *key, size_t key_len, char *value, size_t valu
 
 
 /* ------------------------------------------------------------------------ */
-io_hmap_t *io_hmap_create(size_t keys_limit, size_t heap_size)
+io_hmap_t *io_hmap_create(io_hmap_t *m, size_t keys_limit, size_t heap_size)
 {
-	io_hmap_t *m;
 	size_t kvs_size = sizeof m->map.kvs[0] * keys_limit;
-	m = malloc(kvs_size + heap_size + sizeof *m);
-	m->map.last = m->map.kvs;
-	m->map.kend = m->map.kvs + keys_limit;
+
+	if (!m)
+		m = malloc(kvs_size + heap_size + sizeof *m);
+
+	io_map_create(m, keys_limit);
 	io_oheap_init(&m->heap, (char *)&m->map + sizeof m->map + kvs_size, heap_size);
 	return m;
 }

@@ -27,6 +27,7 @@ static void http_end(http_con_t *c)
 {
 	char const *conn_type = io_hmap_getc(c->params, "Connection");
 	int keep_alive = conn_type && strcmp(conn_type, "keep-alive") ? 1 : 0;
+
 	c->state = keep_alive ? ST_RECV_HEADER : ST_CLOSE;
 }
 
@@ -123,10 +124,11 @@ static int v_http_con_recv(io_d_t *iod)
 			return -1;
 		}
 		if (!len) {
-			io_buf_sock_free(&c->bs); // end of connection
 			debug("%s <%s> closed", iod->vmt->name, io_sock_stoa(&c->bs.conf));
+			io_buf_sock_free(&c->bs); // end of connection
 			return 0;
 		}
+
 		c->end[len] = 0;
 		char *hdr_end = strstr(c->end, "\r\n\r\n");
 		c->end += len;
@@ -136,6 +138,7 @@ static int v_http_con_recv(io_d_t *iod)
 		c->body = hdr_end + 4;
 
 		char const *s = c->req_hdr;
+
 		int parse_result = io_http_req_parse(&c->req, &s);
 		if (parse_result < 0) {
 			debug("%s <%s> bad request %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), parse_result);
@@ -143,7 +146,8 @@ static int v_http_con_recv(io_d_t *iod)
 		}
 
 		c->header = s;
-		c->params = io_hmap_create(48, 8192);
+		c->params = io_hmap_create(c->params, 48, 8192);
+
 		parse_result = io_http_header_parse(c->params, &s);
 		if (parse_result < 0) {
 			debug("%s <%s> bad header %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), parse_result);
