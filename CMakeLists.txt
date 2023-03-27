@@ -1,5 +1,7 @@
 cmake_minimum_required(VERSION 2.6)
 
+project("nanio")
+
 option(ENABLE_EXAMPLES "Build nanio example programs" OFF)
 option(ENABLE_TESTS    "Build nanio tests programs" OFF)
 

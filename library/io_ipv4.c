@@ -134,6 +134,29 @@ _start:;
 
 
 /* ------------------------------------------------------------------------ */
+// list of comma separated IP addresses to int array
+int ipv4_ltoi(uint32_t *ips, size_t limit, char const *list)
+{
+	if (!list)
+		return 0; // no list means empty result
+
+	uint32_t *to = ips;
+	char const *p = list;
+	while (limit-- && *p) {
+		*to++ = ipv4_strtoi(p, &p);
+		while (*p == ' ')
+			++p;
+		if (*p != ',')
+			break;
+		while (*p == ' ')
+			++p;
+		++p;
+	}
+	return to - ips;
+}
+
+
+/* ------------------------------------------------------------------------ */
 int ipv4_isip(char const *ip)
 {
 	unsigned int c = 4;
@@ -158,7 +181,7 @@ int ipv4_ismask(char const *ip)
 {
 	if (!ipv4_isip(ip))
 		return 0;
-	uint32_t m = ipv4_atoi(ip);
+	uint32_t m = ~ipv4_atoi(ip);
 	return !(m & (m+1));
 //	return !m || m == ipv4_wtoi(ipv4_itow(m));
 }
@@ -201,4 +224,30 @@ unsigned int ipv4_itow(unsigned int mask)
 unsigned int ipv4_wtoi(int width)
 {
 	return width ? -1 << (32 - width) : 0;
+}
+
+
+/* ------------------------------------------------------------------------ */
+unsigned int ipv4_netbits(uint32_t ip)
+{
+	unsigned bits = ip >> 29 < 4 ? 8 : (ip >> 29 < 5 ? 16 : 24);
+
+	if (bits == 8) // 100.64.0.0/10
+		return (ip & 0xFFC00000 == 0x64400000) ? 10 : bits;
+
+	switch (ip >> 24) {
+	case 169: // 169.254.0.0/16
+		return (ip & 0xFF0000 == 0xFE0000) ? 16 : bits;
+	case 172: // 172.16.0.0/12
+		return (ip & 0xF00000 == 0x100000) ? 12 : bits;
+	case 192: // 192.168.0.0/16
+		return (ip & 0xFFFF00) == 0xA80000) ? 16 : bits;
+	case 198: // 198.18.0.0/15
+		return (ip & 0xFFFF00) == 0x120000) ? 15 : bits;
+	case 224:
+	case 240:
+		return 4; // multicast
+	case 255: // broadcast
+		return (ip & 0xFFFFFF) == 0xFFFFFF) ? 1 : bits;
+	}
 }

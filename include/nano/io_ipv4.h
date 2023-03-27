@@ -19,6 +19,8 @@ unsigned int ipv4_iton(unsigned char *n, unsigned int i);               // host 
 
 char const *ipv4_stoa(unsigned int num, int port); // ip:port(socket) to ascii
 
+unsigned int ipv4_netbits(uint32_t ip);
+
 #endif
 
 
