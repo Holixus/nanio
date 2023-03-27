@@ -23,22 +23,46 @@ struct http_con {
 
 
 /* -------------------------------------------------------------------------- */
+static void http_end(http_con_t *c)
+{
+	char const *conn_type = io_hmap_getc(c->params, "Connection");
+	int keep_alive = conn_type && strcmp(conn_type, "keep-alive") ? 1 : 0;
+	c->state = keep_alive ? ST_RECV_HEADER : ST_CLOSE;
+}
+
+
+/* -------------------------------------------------------------------------- */
 static int http_empty_response(http_con_t *c, int status)
 {
 	io_buf_sock_writef(&c->bs, "\
 HTTP/%d.%d %03d %s\r\n\
 Content-Length: 0\r\n\
-Content-Type: text/html; charset=UTF-8\r\n\
 \r\n", c->req.version >> 8, c->req.version & 255, status, io_http_resp_status(status));
 
-	char const *conn_type = io_hmap_getc(c->params, "Connection");
-	int keep_alive = conn_type && strcmp(conn_type, "keep-alive") ? 1 : 0;
-	c->state = keep_alive ? ST_RECV_HEADER : ST_CLOSE;
-
+	http_end(c);
 	debug("%s <%s> response %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), status);
 	return 0;
 }
 
+
+
+/* -------------------------------------------------------------------------- */
+static int http_text_response(http_con_t *c, int status, char const *text)
+{
+	size_t len = strlen(text);
+	io_buf_sock_writef(&c->bs, "\
+HTTP/%d.%d %03d %s\r\n\
+Content-Length: %lu\r\n\
+Content-Type: text/html; charset=UTF-8\r\n\
+\r\n", c->req.version >> 8, c->req.version & 255, status, io_http_resp_status(status), len);
+
+	io_buf_sock_write(&c->bs, text, len);
+
+	http_end(c);
+
+	debug("%s <%s> response %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), status);
+	return 0;
+}
 
 
 /* -------------------------------------------------------------------------- */
@@ -51,7 +75,16 @@ static int http_con_process_request(http_con_t *c)
 	}
 
 	debug("%s <%s> %s %s HTTP/%d.%d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
-	http_empty_response(c, HTTP_NO_CONTENT);
+	if (!strcmp(c->req.path, "/favicon.ico")) {
+		http_empty_response(c, HTTP_PAGE_NOT_FOUND);
+		return 0;
+	}
+	http_text_response(c, HTTP_DATA_FOLLOWS, "\
+<html>\n\
+<head><title>Hello!</title></head>\n\
+<body>Hello!</body>\n\
+</html>\n\
+");
 	return 0;
 }
 
