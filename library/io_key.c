@@ -3,10 +3,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <poll.h>
-#include "io.h"
-#include "io_key.h"
+#include "nano/io.h"
+#include "nano/io_ds.h"
+#include "nano/io_key.h"
 
-#include "io_term.i"
+//#include "nano/io_term.i"
+
+
+#if 0
+
 
 /* -------------------------------------------------------------------------- */
 typedef struct seq_handle seq_handle_t;
@@ -23,14 +28,14 @@ struct seq_handle {
 /* -------------------------------------------------------------------------- */
 typedef
 struct keyin {
-	io_stream_t stream;
+	io_d_t d;
 
 	char buffer[32];
 	char *data_start, *data_end;
 
 	seq_handle_t handlers[IO_KEY_HANDLERS_LIMIT];
 	int handlers_length;
-} key_stream_t;
+} key_d_t;
 
 
 
@@ -105,7 +110,7 @@ static int detect_char_seq(char const *text)
 
 
 static key_command_t const *io_key_commands;
-static key_stream_t *io_key_stream;
+static key_d_t *io_key_d;
 
 /* -------------------------------------------------------------------------- */
 void io_key_set_commands(key_command_t const *cmds)
@@ -122,20 +127,20 @@ static void keyin_seq_handler(char const *seq)
 			code = cmd->code;
 			break;
 		}
-	seq_handle_t *hs = io_key_stream->handlers;
-	for (int i = 0, n = io_key_stream->handlers_length; i < n; ++i)
+	seq_handle_t *hs = io_key_d->handlers;
+	for (int i = 0, n = io_key_d->handlers_length; i < n; ++i)
 		hs[i].fn(hs[i].data, seq, code);
 }
 
 
 /* -------------------------------------------------------------------------- */
-static void keyin_event(io_stream_t *stream, int events)
+static void keyin_event(io_d_t *d, int events)
 {
-	key_stream_t *ks = (key_stream_t *)stream;
+	key_d_t *ks = (key_d_t *)d;
 
 	auto char *data_start = ks->data_start, *data_end = ks->data_end, *buffer = ks->buffer;
 
-	ssize_t rn = read(stream->fd, data_end, (size_t)(sizeof ks->buffer + buffer - data_end - 1));
+	ssize_t rn = read(d->fd, data_end, (size_t)(sizeof ks->buffer + buffer - data_end - 1));
 	if (rn < 0)
 		return;
 
@@ -160,13 +165,13 @@ static void keyin_event(io_stream_t *stream, int events)
 }
 
 /* -------------------------------------------------------------------------- */
-static void keyin_free(io_stream_t *stream)
+static void keyin_free(io_d_t *d)
 {
 	term_unraw();
 }
 
 /* -------------------------------------------------------------------------- */
-static const io_stream_ops_t io_key_ops = {
+static const io_d_ops_t io_key_ops = {
 	free: keyin_free,
 	idle: NULL,
 	event: keyin_event
@@ -175,21 +180,21 @@ static const io_stream_ops_t io_key_ops = {
 /* -------------------------------------------------------------------------- */
 int io_key_on(seq_handler_t *onseq, void *data)
 {
-	if (!io_key_stream) {
-		auto key_stream_t *ks = io_key_stream = (key_stream_t *)calloc(1, sizeof(key_stream_t));
-		io_stream_init(&io_key_stream->stream, STDIN_FILENO, POLLIN, &io_key_ops);
+	if (!io_key_d) {
+		auto key_d_t *ks = io_key_d = (key_d_t *)calloc(1, sizeof(key_d_t));
+		io_d_init(&io_key_d->d, STDIN_FILENO, POLLIN, &io_key_ops);
 		ks->data_start = ks->data_end = ks->buffer;
 		term_raw();
 	}
 
-	int len = io_key_stream->handlers_length;
+	int len = io_key_d->handlers_length;
 	if (len >= IO_KEY_HANDLERS_LIMIT)
 		return -1;
 
-	seq_handle_t *h = io_key_stream->handlers + len;
+	seq_handle_t *h = io_key_d->handlers + len;
 	h->fn = onseq;
 	h->data = data;
-	++io_key_stream->handlers_length;
+	++io_key_d->handlers_length;
 	return 0;
 }
 
@@ -197,19 +202,19 @@ int io_key_on(seq_handler_t *onseq, void *data)
 /* -------------------------------------------------------------------------- */
 int io_key_off(seq_handler_t *onseq, void *data)
 {
-	seq_handle_t *hs = io_key_stream->handlers;
-	for (int i = 0, n = io_key_stream->handlers_length; i < n; ++i)
+	seq_handle_t *hs = io_key_d->handlers;
+	for (int i = 0, n = io_key_d->handlers_length; i < n; ++i)
 		if (hs[i].fn == onseq && hs[i].data == data) {
 			int tail = n - i - 1;
 			if (tail > 0)
 				memmove(hs + i, hs + i + 1, (sizeof *hs) * (unsigned)tail);
-			--io_key_stream->handlers_length;
+			--io_key_d->handlers_length;
 			break;
 		}
 
-	if (!io_key_stream->handlers_length) {
-		io_stream_free(&io_key_stream->stream);
-		io_key_stream = NULL;
+	if (!io_key_d->handlers_length) {
+		io_d_free(&io_key_d->d);
+		io_key_d = NULL;
 	}
 	return 0;
 }
@@ -230,3 +235,5 @@ static void io_print_seq(char const *seq)
 	fflush(stdout);
 }
 */
+
+#endif // 0
