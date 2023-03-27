@@ -161,6 +161,8 @@ int io_http_req_parse(io_http_req_t *req, char const **text)
 	io_after_space(&in);
 	req->method = method;
 	req->version = io_http_match_version(&in);
+	if (in[0] == '\r' && in[1] == '\n')
+		in += 2;
 	return req->version < 0 ? (errno = EINVAL, -1) : (*text = in, 0);
 }
 
