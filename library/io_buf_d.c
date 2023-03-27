@@ -70,17 +70,17 @@ int io_buf_d_event_handler(io_d_t *d, int events)
 {
 	io_buf_d_t *b = (io_buf_d_t *)d;
 	if (events & POLLOUT) {
+		if (io_buf_is_empty(&b->out)) {
+			d->events &= ~POLLOUT;
+			if (d->vmt->u.stream.all_sent)
+				d->vmt->u.stream.all_sent(d);
+			return 0;
+		}
 		if (io_buf_send(&b->out, d->fd) < 0) {
 			if (errno == ECONNRESET || errno == ENOTCONN || errno == EPIPE) {
 				io_d_free(d);
 			} else
 				return -1;
-		} else {
-			if (io_buf_is_empty(&b->out)) {
-				d->events &= ~POLLOUT;
-				if (d->vmt->u.stream.all_sent)
-					d->vmt->u.stream.all_sent(d);
-			}
 		}
 	}
 	return 0;
