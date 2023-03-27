@@ -172,7 +172,7 @@ static void create_pid_file()
 }
 
 /* -------------------------------------------------------------------------- */
-static void free_all()
+static void free_all(void *self)
 {
 	if (pid_file)
 		unlink(pid_file);
@@ -280,7 +280,7 @@ _end_of_opts:;
 
 	create_pid_file();
 
-	io_atexit(free_all);
+	io_atexit(free_all, NULL);
 
 	for (int i = 0; i < servs_num; ++i) {
 		sock_addr_t *s = servs + i;
