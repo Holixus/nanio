@@ -92,9 +92,8 @@ static int serv_start(serv_t const *s)
 		.queue_size = 32
 	};
 	strcpy(conf.iface, s->iface ?: "");
-	io_sock_atohost(&conf.sock, "0.0.0.0");
-	conf.sock.port = s->port;
-	//debug("listen: '%s'", io_sock_stoa(&conf.sock));
+	io_sock_any(&conf.sock, AF_INET6, s->port);
+	debug("listen: '%s'", io_sock_stoa(&conf.sock));
 	/*io_stream_listen_t *self = */io_stream_listen_create(NULL, &conf, &io_tcp_serv_vmt);
 	return 0;
 }
