@@ -8,9 +8,9 @@
 
 /* -------------------------------------------------------------------------- */
 
-typedef void (void_fn_t)();
+typedef void (io_atexit_fn)(void *self);
 
-void io_atexit(void_fn_t *fn);
+void io_atexit(io_atexit_fn *fn, void *self);
 
 
 extern char const *io_prog_name;

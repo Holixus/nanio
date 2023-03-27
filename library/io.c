@@ -25,19 +25,27 @@
 
 #define MAX_ATEXIT_HANDLERS (10)
 
-static void_fn_t *at_exits[MAX_ATEXIT_HANDLERS];
+static struct at_exit_cb {
+	io_atexit_fn *fn;
+	void *self;
+} at_exits[MAX_ATEXIT_HANDLERS];
+
 static size_t ae_len;
+
 /* -------------------------------------------------------------------------- */
-void io_atexit(void_fn_t *fn)
+void io_atexit(io_atexit_fn *fn, void *self)
 {
-	at_exits[ae_len++] = fn;
+	if (ae_len < MAX_ATEXIT_HANDLERS) {
+		at_exits[ae_len++] = (struct at_exit_cb){ fn, self };
+	} else
+		syslog(LOG_ERR, "%s queue full", __FUNCTION__);
 }
 
 /* -------------------------------------------------------------------------- */
 static void io_free()
 {
 	for (int i = 0; i < ae_len; ++i)
-		at_exits[i]();
+		at_exits[i].fn(at_exits[i].self);
 
 	io_timers_free();
 	io_ds_free();
