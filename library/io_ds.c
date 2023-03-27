@@ -43,6 +43,10 @@ static char *pollevtoa(int ev)
 	return b + 1;
 }
 
+io_vmt_t io_d_vmt = {
+	.name = "io_d"
+};
+
 /* -------------------------------------------------------------------------- */
 static io_vmt_t *io_vmt_finish(io_vmt_t *vmt)
 {
@@ -77,7 +81,9 @@ void io_d_free(io_d_t *self)
 			*s = self->next;
 			break;
 		}
-	self->vmt->free(self);
+	self->next = NULL;
+	if (self->vmt->free)
+		self->vmt->free(self);
 	close(self->fd);
 	free(self);
 	io_ds_length -= 1;
@@ -134,7 +140,7 @@ int io_ds_poll(int timeout)
 
 	for (size_t i = 0; i < n; ++i)
 		if (fds[i].revents/* & ds[i]->events*/) {
-			printf("[%s] event %s\n", ds[i]->vmt->name, pollevtoa(fds[i].revents));
+			//fprintf(stderr, "%s event %s\n", ds[i]->vmt->name, pollevtoa(fds[i].revents));
 			ds[i]->vmt->event(ds[i], fds[i].revents);
 		}
 
