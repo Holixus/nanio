@@ -71,8 +71,8 @@ static int v_http_con_all_sent(io_d_t *iod)
 	http_con_t *c = (http_con_t *)iod;
 	debug("%s <%s> all_sent", iod->vmt->name, io_sock_stoa(&c->bs.conf));
 	if (c->state == ST_CLOSE) {
-		io_d_free(iod); // end of connection
 		debug("%s <%s> .. close", iod->vmt->name, io_sock_stoa(&c->bs.conf));
+		io_d_free(iod); // end of connection
 	}
 	return 0;
 }
