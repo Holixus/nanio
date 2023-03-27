@@ -44,12 +44,6 @@ IF(BUILD_TESTS)
 	SET_TARGET_PROPERTIES(tests PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
 ENDIF(BUILD_TESTS)
 
-SET_TARGET_PROPERTIES(${static_library_target} PROPERTIES STATIC_LIBRARY_OPTIONS -Wl,--gc-sections,--build-id=none)
-
-IF(BUILD_SHARED_LIBRARY)
-	SET_TARGET_PROPERTIES(${shared_library_target} PROPERTIES LINK_FLAGS -Wl,--gc-sections,--build-id=none)
-ENDIF()
-
 
 IF(BUILD_TESTS)
 	INSTALL(TARGETS tests
