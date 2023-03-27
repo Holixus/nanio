@@ -93,7 +93,7 @@ io_hmap_t *io_hmap_create(io_hmap_t *m, size_t keys_limit, size_t heap_size)
 	if (!m)
 		m = malloc(kvs_size + heap_size + sizeof *m);
 
-	io_map_create(m, keys_limit);
+	io_map_create(&m->map, keys_limit);
 	io_oheap_init(&m->heap, (char *)&m->map + sizeof m->map + kvs_size, heap_size);
 	return m;
 }
