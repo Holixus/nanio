@@ -23,7 +23,6 @@
 #include "nano/io_ipv4.h"
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 #include "nano/io_stream.h"
 #include "nano/io_map.h"
 #include "nano/io_http.h"
@@ -38,7 +37,7 @@ enum {
 
 typedef
 struct io_http_con {
-	io_buf_sock_t bs;
+	io_stream_t s;
 	unsigned int id;
 	int state;
 
@@ -55,7 +54,7 @@ struct io_http_con {
 /* -------------------------------------------------------------------------- */
 static int http_empty_response(http_con_t *c, int status)
 {
-	io_buf_sock_writef(&c->bs, "\
+	io_stream_writef(&c->s, "\
 HTTP/%d.%d %03d %s\r\n\
 Connection: close\r\n\
 Content-Length: 0\r\n\
@@ -74,7 +73,7 @@ static int proxy_process_request(http_con_t *c)
 	default:;
 	}
 
-	syslog(LOG_NOTICE, "<%s> %s %s HTTP/%d.%d", io_sock_stoa(&c->bs.conf), io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
+	syslog(LOG_NOTICE, "<%s> %s %s HTTP/%d.%d", io_sock_stoa(&c->s.sa), io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
 	http_empty_response(c, HTTP_NO_CONTENT);
 	return 0;
 }
@@ -93,10 +92,10 @@ static int proxy_stream_close(io_d_t *iod)
 static int proxy_all_sent_handler(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
-	syslog(LOG_NOTICE, "<%s> all_sent", io_sock_stoa(&c->bs.conf));
+	syslog(LOG_NOTICE, "<%s> all_sent", io_sock_stoa(&c->s.sa));
 	if (c->state == ST_CLOSE) {
 		io_d_free(iod); // end of connection
-		syslog(LOG_NOTICE, "<%s> .. close", io_sock_stoa(&c->bs.conf));
+		syslog(LOG_NOTICE, "<%s> .. close", io_sock_stoa(&c->s.sa));
 	}
 	return 0;
 }
@@ -105,17 +104,17 @@ static int proxy_all_sent_handler(io_d_t *iod)
 static int proxy_stream_recv(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
-	//syslog(LOG_NOTICE, "<%s> recv [%d]", io_sock_stoa(&c->bs.conf), c->state);
+	//syslog(LOG_NOTICE, "<%s> recv [%d]", io_sock_stoa(&c->s.sa), c->state);
 	if (c->state == ST_RECV_HEADER) {
 		size_t to_recv = (unsigned)(sizeof c->req_hdr - 1 - (c->end - c->req_hdr));
-		ssize_t len = io_buf_sock_recv(&c->bs, c->end, to_recv);
+		ssize_t len = io_stream_recv(&c->s, c->end, to_recv);
 		if (len < 0) {
-			syslog(LOG_ERR, "<%s> recv failed: %m", io_sock_stoa(&c->bs.conf));
+			syslog(LOG_ERR, "<%s> recv failed: %m", io_sock_stoa(&c->s.sa));
 			return -1;
 		}
 		if (!len) {
-			io_buf_sock_free(&c->bs); // end of connection
-			syslog(LOG_NOTICE, "<%s> closed", io_sock_stoa(&c->bs.conf));
+			io_stream_close(&c->s); // end of connection
+			syslog(LOG_NOTICE, "<%s> closed", io_sock_stoa(&c->s.sa));
 			return 0;
 		}
 		c->end[len] = 0;
@@ -178,12 +177,12 @@ static int proxy_accept(io_d_t *iod)
 	t->id = proxy_server_con_id(self);
 	t->end = t->req_hdr;
 
-	if (!io_stream_accept(&t->bs, &self->ls, &proxy_stream_vmt)) {
-		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->ls.conf));
+	if (!io_stream_accept(&t->s, &self->ls, &proxy_stream_vmt)) {
+		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->ls.sa));
 		return -1;
 	} else {
-		char const *sid = io_sock_stoa(&self->ls.conf);
-		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->bs.conf));
+		char const *sid = io_sock_stoa(&self->ls.sa);
+		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->s.sa));
 	}
 	return 0;
 }
@@ -199,14 +198,14 @@ static io_vmt_t io_proxy_server_vmt = {
 };
 
 /* -------------------------------------------------------------------------- */
-static int proxy_server_create(io_sock_addr_t *sock, int queue_size)
+static int proxy_server_create(io_sock_addr_t *sa, int queue_size)
 {
 	io_stream_listen_conf_t conf = {
 		.queue_size = queue_size ?: 32
 	};
 	conf.iface[0] = 0;
-	conf.sock = *sock;
-	syslog(LOG_NOTICE, "listen: '%s'", io_sock_stoa(sock));
+	conf.sa = *sa;
+	syslog(LOG_NOTICE, "listen: '%s'", io_sock_stoa(sa));
 	proxy_server_t *self = (proxy_server_t *)calloc(1, sizeof (proxy_server_t));
 	/*io_sock_listen_t *self = */io_stream_listen_create(&self->ls, &conf, &io_proxy_server_vmt);
 	return 0;

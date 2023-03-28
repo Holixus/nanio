@@ -77,11 +77,11 @@ union _sockaddr {
 
 
 /* -------------------------------------------------------------------------- */
-size_t io_sock_set_addr(unisa_t *sa, io_sock_addr_t const *conf);
-size_t io_sock_get_addr(io_sock_addr_t *conf, unisa_t const *sa);
+size_t io_sock_set_addr(unisa_t *usa, io_sock_addr_t const *sa);
+size_t io_sock_get_addr(io_sock_addr_t *sa, unisa_t const *usa);
 
 /* -------------------------------------------------------------------------- */
 int io_socket(int type, int family, char const *iface);
-int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface);
+int io_binded_socket(int type, io_sock_addr_t *sa, char const *iface);
 
 #endif

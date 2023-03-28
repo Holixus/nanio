@@ -23,7 +23,6 @@
 #include "nano/io_ipv4.h"
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 #include "nano/io_stream.h"
 #include "nano/io_map.h"
 #include "nano/io_http.h"
@@ -31,7 +30,7 @@
 
 typedef
 struct io_http_client {
-	io_buf_sock_t bs;
+	io_stream_t s;
 	int state;
 
 	char *end;

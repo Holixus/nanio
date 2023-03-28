@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <time.h>
 #include <string.h>
@@ -22,7 +23,6 @@
 
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 
 #include "nano/io_stream.h"
 
@@ -31,19 +31,59 @@
 
 
 /* -------------------------------------------------------------------------- */
-static int _io_stream_connect(io_sock_addr_t *conf)
+static int _io_stream_connect(io_sock_addr_t *sa)
 {
-	unisa_t sa;
-	size_t sa_size = io_sock_set_addr(&sa, conf);
+	unisa_t usa;
+	size_t sa_size = io_sock_set_addr(&usa, sa);
 
-	int sock = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
-	if (connect(sock, &sa.sa, sa_size) < 0 && errno != EINPROGRESS) {
-		syslog(LOG_ERR, "fail to connect to %s:%d (%m)", io_sock_hostoa(conf), conf->port);
-		close(sock);
+	int sd = socket(AF_INET, SOCK_STREAM | SOCK_NONBLOCK, 0);
+	if (connect(sd, &usa.sa, sa_size) < 0 && errno != EINPROGRESS) {
+		syslog(LOG_ERR, "fail to connect to %s:%d (%m)", io_sock_hostoa(sa), sa->port);
+		close(sd);
 		return -1;
 	}
 
-	return sock;
+	return sd;
+}
+
+
+/* -------------------------------------------------------------------------- */
+int io_stream_write(io_stream_t *s, void const *data, size_t size)
+{
+	io_d_t *d = &s->d;
+	ssize_t sent = 0;
+
+	uint8_t *dt = (uint8_t *)data;
+
+	if (io_buf_is_empty(&s->out)) {
+		sent = send(d->fd, dt, size, 0);
+		if (sent < 0)
+			return -1;
+		dt += sent;
+		size -= sent;
+	}
+	d->events |= POLLOUT; // later call all_sent() method
+	return size ? io_buf_write(&s->out, dt, size) + sent : sent;
+}
+
+
+/* -------------------------------------------------------------------------- */
+int io_stream_vwritef(io_stream_t *s, char const *fmt, va_list ap)
+{
+	char msg[1024];
+	size_t len = (size_t)vsnprintf(msg, sizeof msg, fmt, ap);
+	return io_stream_write(s, msg, len);
+}
+
+
+/* -------------------------------------------------------------------------- */
+int io_stream_writef(io_stream_t *s, char const *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+	int r = io_stream_vwritef(s, fmt, ap);
+	va_end(ap);
+	return r;
 }
 
 
@@ -65,22 +105,22 @@ io_vmt_t io_stream_listen_vmt = {
 /* -------------------------------------------------------------------------- */
 io_stream_listen_t *io_stream_listen_create(io_stream_listen_t *self, io_stream_listen_conf_t *conf, io_vmt_t *vmt)
 {
-	int sock = io_binded_socket(SOCK_STREAM, &conf->sock, conf->iface);
-	if (sock < 0)
+	int sd = io_binded_socket(SOCK_STREAM, &conf->sa, conf->iface);
+	if (sd < 0)
 		return NULL;
 
-	if (listen(sock, conf->queue_size) < 0) {
-		syslog(LOG_ERR, "fail to listen socket to '%s' (%m)", io_sock_stoa(&conf->sock));
-		close(sock);
+	if (listen(sd, conf->queue_size) < 0) {
+		syslog(LOG_ERR, "fail to listen socket to '%s' (%m)", io_sock_stoa(&conf->sa));
+		close(sd);
 		return NULL;
 	}
 
 	if (!self)
 		self = (io_stream_listen_t *)calloc(1, sizeof (io_stream_listen_t));
 
-	self->conf = conf->sock;
+	self->sa = conf->sa;
 
-	io_d_init(&self->d, sock, POLLIN, vmt);
+	io_d_init(&self->d, sd, POLLIN, vmt);
 	return self;
 }
 
@@ -88,18 +128,29 @@ io_stream_listen_t *io_stream_listen_create(io_stream_listen_t *self, io_stream_
 /* -------------------------------------------------------------------------- */
 int io_stream_event_handler(io_d_t *iod, int events)
 {
-	if (events & POLLOUT)
-		if (io_buf_d_event_handler(iod, events) < 0)
-			return -1;
+	io_stream_t *s = (io_stream_t *)iod;
+	if (events & POLLOUT) {
+		if (io_buf_send(&s->out, iod->fd) < 0) {
+			if (errno == ECONNRESET || errno == ENOTCONN || errno == EPIPE) {
+				io_d_free(iod);
+			} else
+				return -1;
+		}
+		if (io_buf_is_empty(&s->out)) {
+			iod->events &= ~POLLOUT;
+			if (iod->vmt->u.stream.all_sent)
+				iod->vmt->u.stream.all_sent(iod);
+			return 0;
+		}
+	}
 
 	if (events & POLLIN) {
-		io_buf_sock_t *s = (io_buf_sock_t *)iod;
 		if (s->connecting) {
 			int err = 0;
 			socklen_t len = sizeof (int);
 			if (getsockopt(iod->fd, SOL_SOCKET, SO_ERROR, &err, &len) < 0) {
 				errno = err;
-				syslog(LOG_ERR, "connect to %s:%d failed (%m)", io_sock_hostoa(&s->conf), s->conf.port);
+				syslog(LOG_ERR, "connect to %s:%d failed (%m)", io_sock_hostoa(&s->sa), s->sa.port);
 				io_d_free(iod);
 				return -1;
 			} else {
@@ -126,8 +177,9 @@ void io_stream_free(io_d_t *d)
 {
 	if (d->vmt->u.stream.close)
 		d->vmt->u.stream.close(d);
-	if (d->vmt->ancestor->u.stream.close)
-		d->vmt->ancestor->u.stream.close(d);
+
+	io_stream_t *s = (io_stream_t *)d;
+	io_buf_free(&s->out);
 }
 
 
@@ -141,20 +193,20 @@ io_vmt_t io_stream_vmt = {
 
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_vmt_t *vmt)
+io_stream_t *io_stream_accept(io_stream_t *t, io_stream_listen_t *s, io_vmt_t *vmt)
 {
-	io_sock_addr_t conf;
+	io_sock_addr_t sa;
 	int sd;
 
-	if (s->conf.family == AF_UNIX) {
+	if (s->sa.family == AF_UNIX) {
 		sd = accept4(s->d.fd, NULL, NULL, SOCK_NONBLOCK);
 	} else {
-		unisa_t sa;
-		memset(&sa, 0, sizeof sa);
+		unisa_t usa;
+		memset(&usa, 0, sizeof sa);
 		socklen_t addrlen = sizeof sa;
-		sd = accept4(s->d.fd, &sa.sa, &addrlen, SOCK_NONBLOCK);
+		sd = accept4(s->d.fd, &usa.sa, &addrlen, SOCK_NONBLOCK);
 		if (sd >= 0)
-			io_sock_get_addr(&conf, &sa);
+			io_sock_get_addr(&sa, &usa);
 	}
 
 	if (sd < 0) {
@@ -163,32 +215,37 @@ io_buf_sock_t *io_stream_accept(io_buf_sock_t *t, io_stream_listen_t *s, io_vmt_
 	}
 
 	if (!t)
-		t = (io_buf_sock_t *)calloc(1, sizeof (io_buf_sock_t));
+		t = (io_stream_t *)calloc(1, sizeof *t);
 
-	if (s->conf.family == AF_UNIX)
-		memset(&t->conf, 0, sizeof t->conf);
+	io_d_init(&t->d, sd, POLLIN, vmt ?: &io_stream_vmt);
+	io_buf_init(&t->out);
+
+	if (s->sa.family == AF_UNIX)
+		memset(&t->sa, 0, sizeof t->sa);
 	else
-		t->conf = conf;
+		t->sa = sa;
 
 	t->connecting = 0;
 
-	io_buf_d_create(&t->bd, sd, vmt ?: &io_stream_vmt);
 	return t;
 }
 
 /* -------------------------------------------------------------------------- */
-io_buf_sock_t *io_stream_connect(io_buf_sock_t *t, io_sock_addr_t *conf, io_vmt_t *vmt)
+io_stream_t *io_stream_connect(io_stream_t *t, io_sock_addr_t *sa, io_vmt_t *vmt)
 {
-	int fd = _io_stream_connect(conf);
+	int fd = _io_stream_connect(sa);
 	if (fd < 0)
 		return NULL;
 
 	if (!t)
-		t = (io_buf_sock_t *)calloc(1, sizeof (io_buf_sock_t));
+		t = (io_stream_t *)calloc(1, sizeof *t);
+
+	io_d_init(&t->d, fd, POLLIN, vmt ?: &io_stream_vmt);
+	io_buf_init(&t->out);
 
 	t->connecting = 1;
-	t->conf = *conf;
+	t->sa = *sa;
 
-	io_buf_d_create(&t->bd, fd, vmt);
 	return t;
 }
+

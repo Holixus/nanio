@@ -19,10 +19,7 @@
 #include <netinet/ip.h>
 
 #include "nano/io.h"
-
 #include "nano/io_ds.h"
-#include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 
 #include "nano/io_sock_addr.h"
 
@@ -128,44 +125,44 @@ int io_sock_atos(io_sock_addr_t *host, char const *a)
 }
 
 /* -------------------------------------------------------------------------- */
-size_t io_sock_set_addr(unisa_t *sa, io_sock_addr_t const *conf)
+size_t io_sock_set_addr(unisa_t *usa, io_sock_addr_t const *sa)
 {
-	memset(sa, 0, sizeof *sa);
-	switch (sa->family = conf->family) {
+	memset(usa, 0, sizeof *usa);
+	switch (usa->family = sa->family) {
 	case AF_INET:
-		sa->in.sin_port = htons(conf->port);
-		sa->in.sin_addr.s_addr = htonl(conf->addr.ipv4 ? conf->addr.ipv4 : INADDR_ANY);
-		return sizeof sa->in;
+		usa->in.sin_port = htons(sa->port);
+		usa->in.sin_addr.s_addr = htonl(sa->addr.ipv4 ? sa->addr.ipv4 : INADDR_ANY);
+		return sizeof usa->in;
 
 	case AF_UNIX:
-		strcpy(sa->un.sun_path, conf->addr.path);
-		return sizeof sa->un;
+		strcpy(usa->un.sun_path, sa->addr.path);
+		return sizeof usa->un;
 
 	case AF_INET6:
-		sa->in6.sin6_port = htons(conf->port);
-		ipv6_hton(sa->in6.sin6_addr.s6_addr, conf->addr.ipv6);
-		return sizeof sa->in6;
+		usa->in6.sin6_port = htons(sa->port);
+		ipv6_hton(usa->in6.sin6_addr.s6_addr, sa->addr.ipv6);
+		return sizeof usa->in6;
 	}
 	return 0;
 }
 
 /* -------------------------------------------------------------------------- */
-size_t io_sock_get_addr(io_sock_addr_t *conf, unisa_t const *sa)
+size_t io_sock_get_addr(io_sock_addr_t *sa, unisa_t const *usa)
 {
-	switch (conf->family = sa->family) {
+	switch (sa->family = usa->family) {
 	case AF_INET:
-		conf->port = ntohs(sa->in.sin_port);
-		conf->addr.ipv4 = ntohl(sa->in.sin_addr.s_addr);
-		return sizeof sa->in;
+		sa->port = ntohs(usa->in.sin_port);
+		sa->addr.ipv4 = ntohl(usa->in.sin_addr.s_addr);
+		return sizeof usa->in;
 
 	case AF_UNIX:
-		conf->addr.path = "";//sa->un.sun_path; // accept doesn't returns remote unix path
-		return sizeof sa->un;
+		sa->addr.path = "";//usa->un.sun_path; // accept doesn't returns remote unix path
+		return sizeof usa->un;
 
 	case AF_INET6:
-		conf->port = ntohs(sa->in6.sin6_port);
-		ipv6_ntoh(conf->addr.ipv6, sa->in6.sin6_addr.s6_addr);
-		return sizeof sa->in6;
+		sa->port = ntohs(usa->in6.sin6_port);
+		ipv6_ntoh(sa->addr.ipv6, usa->in6.sin6_addr.s6_addr);
+		return sizeof usa->in6;
 	}
 	return 0;
 }
@@ -174,39 +171,39 @@ size_t io_sock_get_addr(io_sock_addr_t *conf, unisa_t const *sa)
 /* -------------------------------------------------------------------------- */
 int io_socket(int type, int family, char const *iface)
 {
-	int sock = socket(family, type | SOCK_NONBLOCK, 0);
+	int sd = socket(family, type | SOCK_NONBLOCK, 0);
 
 	if (iface[0] && (family == AF_INET || family == AF_INET6))
-		if (setsockopt(sock, SOL_SOCKET, SO_BINDTODEVICE, iface, (socklen_t)strlen(iface) + 1) < 0) {
+		if (setsockopt(sd, SOL_SOCKET, SO_BINDTODEVICE, iface, (socklen_t)strlen(iface) + 1) < 0) {
 			syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", iface);
-			close(sock);
+			close(sd);
 			return -1;
 		}
 
-	return sock;
+	return sd;
 }
 
 
 /* -------------------------------------------------------------------------- */
-int io_binded_socket(int type, io_sock_addr_t *conf, char const *iface)
+int io_binded_socket(int type, io_sock_addr_t *sa, char const *iface)
 {
-	int sock = io_socket(type, conf->family, iface);
+	int sd = io_socket(type, sa->family, iface);
 
 	int on;
-	if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
-		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s' (%m)", io_sock_stoa(conf));
-		close(sock);
+	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) == -1) {
+		syslog(LOG_ERR, "Set socket option: SO_REUSEADDR fails '%s' (%m)", io_sock_stoa(sa));
+		close(sd);
 		return -1;
 	}
 
-	unisa_t sa;
-	size_t sa_size = io_sock_set_addr(&sa, conf);
-	if (bind(sock, &sa.sa, sa_size) < 0) {
-		syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", io_sock_stoa(conf));
-		close(sock);
+	unisa_t usa;
+	size_t sa_size = io_sock_set_addr(&usa, sa);
+	if (bind(sd, &usa.sa, sa_size) < 0) {
+		syslog(LOG_ERR, "fail to bind listen socket to '%s' (%m)", io_sock_stoa(sa));
+		close(sd);
 		return -1;
 	}
 
-	return sock;
+	return sd;
 }
 

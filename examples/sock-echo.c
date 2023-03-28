@@ -21,7 +21,6 @@
 #include "nano/io.h"
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 #include "nano/io_stream.h"
 #include "nano/io_ipv4.h"
 
@@ -31,7 +30,7 @@ typedef struct io_port io_port_t;
 
 /* -------------------------------------------------------------------------- */
 struct io_port {
-	io_buf_sock_t bs;
+	io_stream_t s;
 	char request[200];
 	char *end;
 	io_stream_listen_t *up;
@@ -41,15 +40,15 @@ struct io_port {
 /* -------------------------------------------------------------------------- */
 static void port_cmd(io_port_t *self, char *cmd)
 {
-	char const *sid = io_sock_stoa(&self->up->conf);
+	char const *sid = io_sock_stoa(&self->up->sa);
 	syslog(LOG_NOTICE, "<%s> cmd: '%s'", sid, cmd);
 	if (!strcmp(cmd, "quit")) {
-		io_buf_sock_writef(&self->bs, "%s: bye!\r\n", sid);
-		io_d_free(&self->bs.bd.d);
+		io_stream_writef(&self->s, "%s: bye!\r\n", sid);
+		io_d_free(&self->s.d);
 		syslog(LOG_NOTICE, "<%s> closed", sid);
 		return ;
 	} else {
-		io_buf_sock_writef(&self->bs, "%s: unknown command: '%s'\r\n", sid, cmd);
+		io_stream_writef(&self->s, "%s: unknown command: '%s'\r\n", sid, cmd);
 	}
 }
 
@@ -59,14 +58,14 @@ static int port_stream_recv(io_d_t *iod)
 {
 	io_port_t *p = (io_port_t *)iod;
 	size_t to_recv = (sizeof p->request) - (unsigned)(p->end - p->request);
-	ssize_t len = io_buf_sock_recv(&p->bs, p->end, to_recv);
+	ssize_t len = io_stream_recv(&p->s, p->end, to_recv);
 	if (len < 0) {
 		syslog(LOG_ERR, "failed to recv (%m)");
 		return -1;
 	} else
 		if (!len) {
-			io_buf_sock_free(&p->bs); // end of connection
-			syslog(LOG_NOTICE, "<%s - %s> closed", io_sock_stoa(&p->up->conf), io_sock_stoa(&p->bs.conf));
+			io_stream_close(&p->s); // end of connection
+			syslog(LOG_NOTICE, "<%s - %s> closed", io_sock_stoa(&p->up->sa), io_sock_stoa(&p->s.sa));
 		} else {
 			char *cmd = p->request, *data = p->end, *lf, *end = p->end + len;
 
@@ -110,13 +109,13 @@ static int port_accept(io_d_t *iod)
 
 	t->end = t->request;
 
-	if (!io_stream_accept(&t->bs, self, &port_stream_vmt)) {
-		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->conf));
+	if (!io_stream_accept(&t->s, self, &port_stream_vmt)) {
+		syslog(LOG_ERR, "<%s> failed to accept: %m", io_sock_stoa(&self->sa));
 		return -1;
 	} else {
-		char const *sid = io_sock_stoa(&self->conf);
-		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->bs.conf));
-		io_buf_sock_writef(&t->bs, "%s: hello, %s!\r\n", sid, io_sock_stoa(&t->bs.conf));
+		char const *sid = io_sock_stoa(&self->sa);
+		syslog(LOG_NOTICE, "<%s> accept: '%s'", sid, io_sock_stoa(&t->s.sa));
+		io_stream_writef(&t->s, "%s: hello, %s!\r\n", sid, io_sock_stoa(&t->s.sa));
 	}
 	return 0;
 }
@@ -134,16 +133,16 @@ static io_vmt_t io_port_server_vmt = {
 
 
 /* -------------------------------------------------------------------------- */
-static int port_server_create(io_sock_addr_t *sock, uint32_t port_offset, char const *iface, int queue_size)
+static int port_server_create(io_sock_addr_t *sa, uint32_t port_offset, char const *iface, int queue_size)
 {
 	io_stream_listen_conf_t conf = {
 		.queue_size = queue_size ?: 32
 	};
 	if (iface)
 		strcpy(conf.iface, iface);
-	conf.sock = *sock;
-	conf.sock.port += port_offset;
-	//syslog(LOG_NOTICE, "listen: '%s'", io_sock_hosttoa(&conf));
+	conf.sa = *sa;
+	conf.sa.port += port_offset;
+	//syslog(LOG_NOTICE, "listen: '%s'", io_sock_hosttoa(sa));
 	/*io_stream_listen_t *self = */io_stream_listen_create(NULL, &conf, &io_port_server_vmt);
 	return 0;
 }

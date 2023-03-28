@@ -8,7 +8,7 @@ enum http_state {
 
 typedef
 struct http_con {
-	io_buf_sock_t bs;
+	io_stream_t s;
 	int state;
 
 	char *end;
@@ -39,13 +39,13 @@ static void http_end(http_con_t *c)
 /* -------------------------------------------------------------------------- */
 static int http_empty_response(http_con_t *c, int status)
 {
-	io_buf_sock_writef(&c->bs, "\
+	io_stream_writef(&c->s, "\
 HTTP/%d.%d %03d %s\r\n\
 Content-Length: 0\r\n\
 \r\n", c->req.version >> 8, c->req.version & 255, status, io_http_resp_status(status));
 
 	http_end(c);
-	debug("%s <%s> response %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), status);
+	io_stream_debug(&(c->s), "response %d", status);
 	return 0;
 }
 
@@ -55,17 +55,17 @@ Content-Length: 0\r\n\
 static int http_text_response(http_con_t *c, int status, char const *text)
 {
 	size_t len = strlen(text);
-	io_buf_sock_writef(&c->bs, "\
+	io_stream_writef(&c->s, "\
 HTTP/%d.%d %03d %s\r\n\
 Content-Length: %lu\r\n\
 Content-Type: text/html; charset=UTF-8\r\n\
 \r\n", c->req.version >> 8, c->req.version & 255, status, io_http_resp_status(status), len);
 
-	io_buf_sock_write(&c->bs, text, len);
+	io_stream_write(&c->s, text, len);
 
 	http_end(c);
 
-	debug("%s <%s> response %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), status);
+	io_stream_debug(&c->s, "response %d", status);
 	return 0;
 }
 
@@ -79,7 +79,7 @@ static int http_con_process_request(http_con_t *c)
 	default:;
 	}
 
-	debug("%s <%s> %s %s HTTP/%d.%d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
+	io_stream_debug(&c->s, "%s %s HTTP/%d.%d", io_http_req_method(c->req.method), c->req.path, c->req.version >> 8, c->req.version & 255);
 	if (!strcmp(c->req.path, "/favicon.ico")) {
 		http_empty_response(c, HTTP_PAGE_NOT_FOUND);
 		return 0;
@@ -98,7 +98,7 @@ static int http_con_process_request(http_con_t *c)
 static int v_http_con_close(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
-	debug("%s <%s> real close (free params)", iod->vmt->name, io_sock_stoa(&c->bs.conf));
+	io_stream_debug(&c->s, "real close (free params)");
 	if (c->params)
 		free(c->params);
 	return 0;
@@ -109,10 +109,8 @@ static int v_http_con_close(io_d_t *iod)
 static int v_http_con_all_sent(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
-	debug("%s <%s> all_sent", iod->vmt->name, io_sock_stoa(&c->bs.conf));
-	if (c->state == ST_CLOSE) {
+	if (c->state == ST_CLOSE)
 		io_d_free(iod); // end of connection
-	}
 	return 0;
 }
 
@@ -121,17 +119,17 @@ static int v_http_con_all_sent(io_d_t *iod)
 static int v_http_con_recv(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
-	//debug("<%s> recv [%d]", io_sock_stoa(&c->bs.conf), c->state);
+	//io_stream_debug(&c->s, "recv [%d]", c->state);
 	if (c->state == ST_RECV_HEADER) {
 		size_t to_recv = (unsigned)(sizeof c->req_hdr - 1 - (c->end - c->req_hdr));
-		ssize_t len = io_buf_sock_recv(&c->bs, c->end, to_recv);
+		ssize_t len = io_stream_recv(&c->s, c->end, to_recv);
 		if (len < 0) {
-			error("%s <%s> recv failed: %m", iod->vmt->name, io_sock_stoa(&c->bs.conf));
+			io_stream_error(&c->s, "recv failed: %m");
 			return -1;
 		}
 		if (!len) {
-			debug("%s <%s> closed", iod->vmt->name, io_sock_stoa(&c->bs.conf));
-			io_buf_sock_free(&c->bs); // end of connection
+			io_stream_debug(&c->s, "closed");
+			io_stream_close(&c->s); // end of connection
 			return 0;
 		}
 
@@ -147,7 +145,7 @@ static int v_http_con_recv(io_d_t *iod)
 
 		int parse_result = io_http_req_parse(&c->req, &s);
 		if (parse_result < 0) {
-			debug("%s <%s> bad request %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), parse_result);
+			io_stream_debug(&c->s, "bad request %d", parse_result);
 			return http_empty_response(c, HTTP_BAD_REQUEST);
 		}
 
@@ -156,7 +154,7 @@ static int v_http_con_recv(io_d_t *iod)
 
 		parse_result = io_http_header_parse(c->params, &s);
 		if (parse_result < 0) {
-			debug("%s <%s> bad header %d", c->bs.bd.d.vmt->name, io_sock_stoa(&c->bs.conf), parse_result);
+			io_stream_debug(&c->s, "bad header %d", parse_result);
 			return http_empty_response(c, HTTP_BAD_REQUEST);
 		}
 
@@ -182,17 +180,15 @@ io_vmt_t http_con_vmt = {
 /* -------------------------------------------------------------------------- */
 static int http_accept(io_stream_listen_t *self)
 {
-	http_con_t *h = (http_con_t *)calloc(1, sizeof *h);
-	if (!io_stream_accept(&h->bs, self, &http_con_vmt)) {
-		error("%s <%s> failed to accept", self->d.vmt->name, io_sock_stoa(&self->conf));
-		free(h);
+	http_con_t *c = (http_con_t *)calloc(1, sizeof *c);
+	if (!io_stream_accept(&c->s, self, &http_con_vmt)) {
+		io_stream_error(self, "failed to accept");
+		free(c);
 		return -1;
 	}
 
-	h->end = h->req_hdr;
+	c->end = c->req_hdr;
 
-	char const *sid = io_sock_stoa(&self->conf);
-	debug("%s <%s> accept: '%s'", h->bs.bd.d.vmt->name, sid, io_sock_stoa(&h->bs.conf));
-
+	io_stream_debug(&c->s, "accept: '%s'", io_sock_stoa(&c->s.sa));
 	return 0;
 }

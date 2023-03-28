@@ -21,7 +21,6 @@
 #include "nano/io.h"
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 #include "nano/io_stream.h"
 #include "nano/io_ipv4.h"
 
@@ -32,6 +31,7 @@
 #include "multi_server_log.i"
 #include "multi_server_http.i"
 #include "multi_server_port.i"
+#include "multi_server_mqtt.i"
 
 
 #define PORTS_OFFSET 2000
@@ -53,10 +53,16 @@ static int tcp_serv_accept(io_d_t *iod)
 {
 	io_stream_listen_t *self = (io_stream_listen_t *)iod;
 
-//	debug("%s <%u> port reqested", self->d.vmt->name, self->conf.port);
-	switch (self->conf.port) {
+//	io_stream_debug(self, "port reqested");
+	switch (self->sa.port) {
 	case HTTP_PORT:
 		return http_accept(self);
+	case MQTT_PORT:
+		return mqtt_accept(self);
+/*	case FTP_PORT:
+		return ftp_accept(self);
+	case POP3_PORT:
+		return pop3_accept(self);*/
 	}
 	return port_accept(self);
 }
@@ -92,8 +98,8 @@ static int serv_start(serv_t const *s)
 		.queue_size = 32
 	};
 	strcpy(conf.iface, s->iface ?: "");
-	io_sock_any(&conf.sock, AF_INET6, s->port);
-	debug("listen: '%s'", io_sock_stoa(&conf.sock));
+	io_sock_any(&conf.sa, AF_INET, s->port);
+	debug("listen: '%s' [%s]", io_sock_stoa(&conf.sa), s->name);
 	/*io_stream_listen_t *self = */io_stream_listen_create(NULL, &conf, &io_tcp_serv_vmt);
 	return 0;
 }

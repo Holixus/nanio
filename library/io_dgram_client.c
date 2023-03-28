@@ -22,7 +22,6 @@
 
 #include "nano/io_ds.h"
 #include "nano/io_buf.h"
-#include "nano/io_buf_d.h"
 
 #include "nano/io_dgram_client.h"
 
@@ -37,8 +36,8 @@ static int io_dgram_client_send(io_dgram_client_t *d, io_sock_addr_t const *to, 
 		return 0;
 
 	if (io_queue_is_empty(&d->queue)) {
-		unisa_t sa;
-		ssize_t sent = sendto(d->d.fd, buf, size, 0, &sa.sa, io_sock_set_addr(&sa, to));
+		unisa_t usa;
+		ssize_t sent = sendto(d->d.fd, buf, size, 0, &usa.sa, io_sock_set_addr(&usa, to));
 		if (sent >= 0)
 			return sent;
 		if (sent < 0 && errno != EAGAIN)
@@ -69,13 +68,13 @@ int io_dgram_client_send_local(io_dgram_client_t *d, io_sock_addr_t const *to, v
 
 
 /* -------------------------------------------------------------------------- */
-static int io_dgram_recv(io_d_t *d, io_sock_addr_t *conf, void *buf, size_t size)
+static int io_dgram_recv(io_d_t *d, io_sock_addr_t *sa, void *buf, size_t size)
 {
-	unisa_t sa;
+	unisa_t usa;
 	socklen_t sa_size;
-	int r = recvfrom(d->fd, buf, size, 0, &sa.sa, &sa_size);
+	int r = recvfrom(d->fd, buf, size, 0, &usa.sa, &sa_size);
 	if (r >= 0)
-		io_sock_get_addr(conf, &sa);
+		io_sock_get_addr(sa, &usa);
 	return r;
 }
 
@@ -96,8 +95,8 @@ static int io_dgram_client_event_handler(io_d_t *iod, int events)
 	if (events & POLLOUT) {
 		io_queue_block_t *b = io_queue_get_block(&self->queue);
 		if (b) {
-			unisa_t sa;
-			ssize_t sent = sendto(self->d.fd, b->data, b->size, 0, &sa.sa, io_sock_set_addr(&sa, (io_sock_addr_t const *)(b->tag)));
+			unisa_t usa;
+			ssize_t sent = sendto(self->d.fd, b->data, b->size, 0, &usa.sa, io_sock_set_addr(&usa, (io_sock_addr_t const *)(b->tag)));
 			if (sent >= 0) {
 				io_queue_block_drop(&self->queue);
 			} else {
@@ -137,14 +136,14 @@ io_vmt_t io_dgram_client_vmt = {
 /* -------------------------------------------------------------------------- */
 io_dgram_client_t *io_dgram_client_create(io_dgram_client_t *self, int family, char const *iface, io_vmt_t *vmt)
 {
-	int sock = io_socket(SOCK_DGRAM, family, iface);
-	if (sock < 0)
+	int sd = io_socket(SOCK_DGRAM, family, iface);
+	if (sd < 0)
 		return NULL;
 
 	if (!self)
 		self = (io_dgram_client_t *)calloc(1, sizeof (io_dgram_client_t));
 
-	io_d_init(&self->d, sock, POLLIN, vmt);
+	io_d_init(&self->d, sd, POLLIN, vmt);
 
 	io_queue_init(&self->queue);
 	return self;
