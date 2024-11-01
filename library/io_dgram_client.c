@@ -7,8 +7,6 @@
 #include <signal.h>
 
 #include <errno.h>
-#include <syslog.h>
-
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/types.h>

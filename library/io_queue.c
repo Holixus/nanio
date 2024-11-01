@@ -6,9 +6,6 @@
 #include <string.h>
 #include <signal.h>
 
-#include <errno.h>
-#include <syslog.h>
-
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -17,6 +14,7 @@
 #include <netinet/ip.h>
 
 #include "nano/io.h"
+#include "nano/io_log.h"
 #include "nano/io_buf.h"
 
 #include "nano/io_queue.h"

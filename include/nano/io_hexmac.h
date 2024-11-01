@@ -23,4 +23,6 @@ char const *hex_ntoa(unsigned char const *bin, size_t size);
 int hex_aton(unsigned char *bin, size_t size, char const *hex);
 int hex_check(size_t size, char const *hex);
 
+unsigned int hextobyte(char const *text);
+
 #endif

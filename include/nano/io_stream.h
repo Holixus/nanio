@@ -50,11 +50,20 @@ int io_stream_event_handler(io_d_t *iod, int events);
 /* -------------------------------------------------------------------------- */
 /* helpers */
 
-#define io_stream_close(s)                 io_d_free(&(s)->d)
+#define io_stream_close(s)                 io_d_close(&(s)->d)
 #define io_stream_recv(s, b, z)            io_d_recv(&(s)->d, b, z)
 
 int io_stream_write(io_stream_t *s, void const *data, size_t size);
 int io_stream_vwritef(io_stream_t *s, char const *fmt, va_list ap);
 int io_stream_writef(io_stream_t *s, char const *fmt, ...) __attribute__ ((format (printf, 2, 3)));
+
+#define io_stream_debug(s, f, ...) \
+	io_debug("%s <%s> " f, (s)->d.vmt->name, io_sock_stoa(&(s)->sa), ##__VA_ARGS__)
+
+#define io_stream_warn(s, f, ...) \
+	io_warn(":( %s <%s> " f, (s)->d.vmt->name, io_sock_stoa(&(s)->sa), ##__VA_ARGS__)
+
+#define io_stream_error(s, f, ...) \
+	io_err(":( %s <%s> " f, (s)->d.vmt->name, io_sock_stoa(&(s)->sa), ##__VA_ARGS__)
 
 #endif

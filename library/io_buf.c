@@ -7,8 +7,6 @@
 #include <signal.h>
 
 #include <errno.h>
-#include <syslog.h>
-
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -18,6 +16,7 @@
 
 #include "nano/io.h"
 #include "nano/io_buf.h"
+#include "nano/io_log.h"
 
 
 /* ------------------------------------------------------------------------ */
@@ -62,6 +61,15 @@ void io_buf_free(io_buf_t *b)
 }
 
 /* ------------------------------------------------------------------------ */
+int io_buf_length(io_buf_t *b)
+{
+	int len = 0;
+	for (io_seg_t *s = b->first; s; s = s->next)
+		len += s->end - s->begin;
+	return len;
+}
+
+/* ------------------------------------------------------------------------ */
 static io_seg_t *io_buf_get_last_seg(io_buf_t *b)
 {
 	io_seg_t *s = b->last;
@@ -74,12 +82,12 @@ static io_seg_t *io_buf_get_last_seg(io_buf_t *b)
 static size_t io_buf_get_seg_to_write(io_buf_t *b, io_seg_t **ps)
 {
 	io_seg_t *s = *ps;
-	size_t to_recv = sizeof s->data - (unsigned)(s->end - s->begin);
+	size_t to_recv = sizeof s->data - (unsigned)(s->end - s->data);
 	if (!to_recv) {
 		s = io_seg_new();
 		b->last->next = s;
 		b->last = s;
-		to_recv = (signed)sizeof s->data - (s->end - s->begin);
+		to_recv = sizeof s->data - (unsigned)(s->end - s->data);
 	}
 	*ps = s;
 	return to_recv;

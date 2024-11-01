@@ -20,7 +20,7 @@ struct port_con {
 static int port_con_process_request(port_con_t *c)
 {
 
-	int req_len = c->next - c->cmd;
+	ssize_t req_len = c->next - c->cmd;
 
 	c->next[-2] = 0;
 
@@ -53,14 +53,12 @@ static int v_port_con_close(io_d_t *iod)
 
 
 /* -------------------------------------------------------------------------- */
-static int v_port_con_all_sent(io_d_t *iod)
+static void v_port_con_all_sent(io_d_t *iod)
 {
 	port_con_t *c = (port_con_t *)iod;
 	//io_stream_debug(&c->s, "all_sent");
-	if (c->state == FTP_CLOSE) {
+	if (c->state == FTP_CLOSE)
 		io_stream_close(&c->s); // end of connection
-	}
-	return 0;
 }
 
 
@@ -70,7 +68,7 @@ static int v_port_con_recv(io_d_t *iod)
 	port_con_t *c = (port_con_t *)iod;
 	//io_stream_debug(&c->s, "recv [%d]", c->state);
 	if (c->state == FTP_RECV_CMD) {
-		size_t to_recv = (unsigned)(sizeof c->cmd - 1 - (c->end - c->cmd));
+		size_t to_recv = (unsigned)(sizeof c->cmd - 1 - (unsigned)(c->end - c->cmd));
 		ssize_t len = io_stream_recv(&c->s, c->end, to_recv);
 		if (len < 0) {
 			io_stream_error(&c->s, "recv failed: %m");
@@ -118,10 +116,10 @@ static int port_accept(io_stream_listen_t *self)
 		return -1;
 	}
 
-	io_stream_writef(&c->s, "220 welcome to my FTP server\r\n");
-
 	c->end = c->cmd;
 
 	io_stream_debug(&c->s, "accept: '%s'", io_sock_stoa(&c->s.sa));
+
+	io_stream_writef(&c->s, "220 welcome to my FTP server\r\n");
 	return 0;
 }

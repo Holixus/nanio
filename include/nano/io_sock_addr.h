@@ -4,9 +4,10 @@
 #include <sys/un.h>
 #include <netinet/ip.h>
 
-typedef uint32_t io_ipv4_t;
-typedef uint16_t io_ipv6_t[8];
 
+#ifdef IPV4_SOCKET
+
+typedef uint32_t io_ipv4_t;
 
 /* -------------------------------------------------------------------------- */
 typedef struct io_ipv4_sock_addr {
@@ -17,6 +18,12 @@ typedef struct io_ipv4_sock_addr {
 	} addr;
 } io_ipv4_sock_addr_t;
 
+#endif
+
+
+#ifdef IPV6_SOCKET
+
+typedef uint16_t io_ipv6_t[8];
 
 /* -------------------------------------------------------------------------- */
 typedef struct io_ipv6_sock_addr {
@@ -27,6 +34,10 @@ typedef struct io_ipv6_sock_addr {
 	} addr;
 } io_ipv6_sock_addr_t;
 
+#endif
+
+
+#ifdef UNIX_SOCKET
 
 /* -------------------------------------------------------------------------- */
 typedef struct io_unix_sock_addr {
@@ -37,6 +48,7 @@ typedef struct io_unix_sock_addr {
 	} addr;
 } io_unix_sock_addr_t;
 
+#endif
 
 /* -------------------------------------------------------------------------- */
 typedef
@@ -44,9 +56,15 @@ struct io_sock_addr {
 	uint16_t port;
 	uint16_t family;
 	union {
+#ifdef UNIX_SOCKET
 		char const *path;
+#endif
+#ifdef IPV4_SOCKET
 		io_ipv4_t ipv4; // uint32_t
+#endif
+#ifdef IPV6_SOCKET
 		io_ipv6_t ipv6; // uint16_t[8]
+#endif
 	} addr;
 } io_sock_addr_t;
 
@@ -68,11 +86,16 @@ int io_sock_any(io_sock_addr_t *host, int family, int port);
 /* struct sockaddr helpers */
 typedef
 union _sockaddr {
-	sa_family_t family;
 	struct sockaddr sa;
+#ifdef UNIX_SOCKET
 	struct sockaddr_un un;
+#endif
+#ifdef IPV4_SOCKET
 	struct sockaddr_in in;
+#endif
+#ifdef IPV6_SOCKET
 	struct sockaddr_in6 in6;
+#endif
 } unisa_t;
 
 

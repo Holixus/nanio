@@ -5,9 +5,6 @@
 #include <time.h>
 #include <string.h>
 
-#include <errno.h>
-#include <syslog.h>
-
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -20,7 +17,7 @@
 unsigned long long uptime_getmsl()
 {
 	struct timespec ts;
-	clock_gettime(CLOCK_MONOTONIC_RAW, &ts);
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 	return (unsigned long long)(ts.tv_sec * 1000 + ts.tv_nsec / 1000000);
 }
 
@@ -111,6 +108,33 @@ void io_timer_stop(io_timer_t *self)
 {
 	self->next_time = -1;
 }
+
+/* -------------------------------------------------------------------------- */
+io_timer_t *io_on_timeout(timer_handler_t *handler, void *custom, int timeout)
+{
+	io_timer_t *t = io_timer_alloc(handler, custom);
+	if (t)
+		io_timer_set_timeout(t, timeout);
+	return t;
+}
+
+
+/* -------------------------------------------------------------------------- */
+io_timer_t *io_on_period(timer_handler_t *handler, void *custom, int period)
+{
+	io_timer_t *t = io_timer_alloc(handler, custom);
+	if (t)
+		io_timer_set_period(t, period);
+	return t;
+}
+
+
+/* -------------------------------------------------------------------------- */
+int io_has_active_timers()
+{
+	return io_active_timers != NULL;
+}
+
 
 /* -------------------------------------------------------------------------- */
 io_timer_t *io_get_nearest_timer()

@@ -83,31 +83,28 @@ char const *mac_ntoa(unsigned char const *mac)
 /* ------------------------------------------------------------------------ */
 int mac_copy(unsigned char *dst, unsigned char *src)
 {
-	dst[0] =src[0];
-	dst[1] =src[1];
-	dst[2] =src[2];
-	dst[3] =src[3];
-	dst[4] =src[4];
-	dst[5] =src[5];
+	dst[0] = src[0];
+	dst[1] = src[1];
+	dst[2] = src[2];
+	dst[3] = src[3];
+	dst[4] = src[4];
+	dst[5] = src[5];
 	return 0;
 }
 
 /* ------------------------------------------------------------------------ */
 int mac_is_equal(const unsigned char *dst, const unsigned char *src)
 {
-	return (dst[0] == src[0])
-			&&(dst[1] == src[1])
-			&&(dst[2] == src[2])
-			&&(dst[3] == src[3])
-			&&(dst[4] == src[4])
-			&&(dst[5] == src[5]);
+	return (dst[0] == src[0]) && (dst[1] == src[1])
+	    && (dst[2] == src[2]) && (dst[3] == src[3])
+	    && (dst[4] == src[4]) && (dst[5] == src[5]);
 }
 
 /* ------------------------------------------------------------------------ */
 int mac_is_ipv4_multicast(const unsigned char *mac)
 {
 	static const unsigned char  prefix[] = {0x01, 0x00, 0x5E};
-	return mac[0] == prefix[0] && mac[1] == prefix[1]  && mac[2] == prefix[2]; 
+	return mac[0] == prefix[0] && mac[1] == prefix[1]  && mac[2] == prefix[2];
 }
 
 /* ------------------------------------------------------------------------ */
@@ -129,7 +126,6 @@ int mac_is_dns_multicast(const unsigned char *mac)
 	return (mac_is_ipv4_multicast(mac) || mac_is_ipv4_multicast(mac)) && (mac[5] == 0xfb);
 }
 
-
 /* ------------------------------------------------------------------------ */
 static int hextonibble(char digit)
 {
@@ -148,7 +144,7 @@ static int hextonibble(char digit)
 }
 
 /* ------------------------------------------------------------------------ */
-static unsigned int hextobyte(char const *text)
+unsigned int hextobyte(char const *text)
 {
 	return hextonibble(text[0]) * 16 + hextonibble(text[1]);
 }

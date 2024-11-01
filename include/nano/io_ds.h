@@ -19,10 +19,12 @@ struct io_vmt {
 	int  (*event   )(io_d_t *d, int events);
 	union {
 		struct {
-			int  (*accept  )(io_d_t *d);
-			int  (*recv    )(io_d_t *d);
-			int  (*all_sent)(io_d_t *d);
-			int  (*close   )(io_d_t *d);
+			int  (*accept   )(io_d_t *d);
+			int  (*connected)(io_d_t *d);
+			int  (*recv     )(io_d_t *d);
+			void (*sent     )(io_d_t *d, unsigned size);
+			void (*all_sent )(io_d_t *d);
+			int  (*close    )(io_d_t *d);
 		} stream;
 		struct {
 			int  (*recvd   )(io_d_t *d, io_sock_addr_t const *from, void *data, size_t size); // datagram packet received
@@ -44,6 +46,7 @@ struct io_d {
 
 /* -------------------------------------------------------------------------- */
 void io_d_init(io_d_t *self, int fd, int events, io_vmt_t *vmt);
+void io_d_close(io_d_t *self);
 void io_d_free(io_d_t *self);
 
 /* -------------------------------------------------------------------------- */
@@ -55,8 +58,8 @@ extern io_vmt_t io_d_vmt;
 /* -------------------------------------------------------------------------- */
 /* internals */
 
-void io_ds_init();
-void io_ds_free();
+void io_ds_init(void);
+void io_ds_free(void);
 int  io_ds_poll(int timeout);
 
 #endif

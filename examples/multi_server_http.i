@@ -106,12 +106,11 @@ static int v_http_con_close(io_d_t *iod)
 
 
 /* -------------------------------------------------------------------------- */
-static int v_http_con_all_sent(io_d_t *iod)
+static void v_http_con_all_sent(io_d_t *iod)
 {
 	http_con_t *c = (http_con_t *)iod;
 	if (c->state == ST_CLOSE)
 		io_d_free(iod); // end of connection
-	return 0;
 }
 
 
@@ -121,7 +120,7 @@ static int v_http_con_recv(io_d_t *iod)
 	http_con_t *c = (http_con_t *)iod;
 	//io_stream_debug(&c->s, "recv [%d]", c->state);
 	if (c->state == ST_RECV_HEADER) {
-		size_t to_recv = (unsigned)(sizeof c->req_hdr - 1 - (c->end - c->req_hdr));
+		size_t to_recv = (unsigned)(sizeof c->req_hdr - 1 - (unsigned)(c->end - c->req_hdr));
 		ssize_t len = io_stream_recv(&c->s, c->end, to_recv);
 		if (len < 0) {
 			io_stream_error(&c->s, "recv failed: %m");

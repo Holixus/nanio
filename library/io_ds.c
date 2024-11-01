@@ -8,8 +8,6 @@
 #include <signal.h>
 
 #include <errno.h>
-#include <syslog.h>
-
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/types.h>
@@ -18,12 +16,14 @@
 #include <netinet/ip.h>
 
 #include "nano/io.h"
+#include "nano/io_log.h"
 #include "nano/io_ds.h"
 
 /* -------------------------------------------------------------------------- */
 static io_d_t *io_ds;
 static size_t io_ds_length;
 
+#ifndef NDEBUG
 /* -------------------------------------------------------------------------- */
 static char *pollevtoa(int ev)
 {
@@ -42,6 +42,7 @@ static char *pollevtoa(int ev)
 		p += sprintf(p, "|0x%02x", ev);
 	return b + 1;
 }
+#endif
 
 io_vmt_t io_d_vmt = {
 	.name = "io_d"
@@ -74,19 +75,29 @@ void io_d_init(io_d_t *self, int fd, int events, io_vmt_t *vmt)
 }
 
 /* -------------------------------------------------------------------------- */
+void io_d_close(io_d_t *self)
+{
+	if (self->fd >= 0) {
+		close(self->fd);
+		self->fd = -1;
+	}
+}
+
+/* -------------------------------------------------------------------------- */
 void io_d_free(io_d_t *self)
 {
 	for (io_d_t **s = &io_ds; s; s = &s[0]->next)
 		if (*s == self) {
 			*s = self->next;
+			io_ds_length -= 1;
 			break;
 		}
 	self->next = NULL;
 	if (self->vmt->free)
 		self->vmt->free(self);
-	close(self->fd);
+	if (self->fd >= 0)
+		close(self->fd);
 	free(self);
-	io_ds_length -= 1;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -138,10 +149,13 @@ int io_ds_poll(int timeout)
 	if (ret < 0)
 		return ret;
 
-	for (size_t i = 0; i < n; ++i)
+	for (size_t i = 0; i < n && ret; ++i)
 		if (fds[i].revents/* & ds[i]->events*/) {
-			//fprintf(stderr, "%s event %s\n", ds[i]->vmt->name, pollevtoa(fds[i].revents));
+			//io_debug("%s event %s\n", ds[i]->vmt->name, pollevtoa(fds[i].revents));
 			ds[i]->vmt->event(ds[i], fds[i].revents);
+			if (ds[i]->fd == -1)
+				io_d_free(ds[i]);
+			--ret;
 		}
 
 	return (int)n;

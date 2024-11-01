@@ -79,6 +79,12 @@ char const *ipv4_itoa(unsigned int num)
 	return buf;
 }
 
+/* ------------------------------------------------------------------------ */
+char const *ipv4_wtoa(unsigned int width)
+{
+	return ipv4_itoa(ipv4_wtoi(width));
+}
+
 
 /* ------------------------------------------------------------------------ */
 char const *ipv4_stoa(unsigned int num, int port)
@@ -216,7 +222,7 @@ unsigned int ipv4_itow(unsigned int mask)
 /* ------------------------------------------------------------------------ */
 unsigned int ipv4_wtoi(int width)
 {
-	return width ? -1 << (32 - width) : 0;
+	return width ? ~0U << (32 - width) : 0;
 }
 
 

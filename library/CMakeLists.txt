@@ -9,7 +9,10 @@ OPTION(UNIX_SOCKET "" ON)
 OPTION(IPV4_SOCKET "" ON)
 
 
-OPTION(HOST_DEBUG "Log to console" OFF)
+OPTION(HOST_DEBUG "Enable debug logging" OFF)
+OPTION(USE_SYSLOG "Enable logging to syslog" OFF)
+
+CONFIGURE_FILE(io_log.c.in io_log.c @ONLY)
 
 
 ADD_DEFINITIONS(-pipe --std=gnu99 -ftabstop=4 -Wno-unused-function)
@@ -27,6 +30,20 @@ IF(BUILD_TESTS)
 ENDIF(BUILD_TESTS)
 
 FILE(GLOB LIB_SOURCES io_*.c io.c)
+FILE(GLOB IPV6_SOURCES io_ipv6.c)
+FILE(GLOB IPV4_SOURCES io_ipv4.c)
+
+IF(NOT IPV6_SOCKET)
+	LIST(REMOVE_ITEM LIB_SOURCES ${IPV6_SOURCES})
+	message(STATUS "removed IPv6: ${IPV6_SOURCES}")
+	message(STATUS "cbd: ${CMAKE_CURRENT_BINARY_DIR}")
+ENDIF()
+
+IF(NOT IPV4_SOCKET)
+	LIST(REMOVE_ITEM LIB_SOURCES ${IPV4_SOURCES})
+	message(STATUS "removed IPv4: ${IPV4_SOURCES}")
+	message(STATUS "cbd: ${CMAKE_CURRENT_BINARY_DIR}")
+ENDIF()
 
 ADD_LIBRARY(${static_library_target} STATIC ${LIB_SOURCES})
 

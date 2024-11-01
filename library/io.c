@@ -7,7 +7,6 @@
 #include <signal.h>
 
 #include <errno.h>
-#include <syslog.h>
 
 #include <sys/poll.h>
 #include <sys/time.h>
@@ -22,6 +21,7 @@
 #include "nano/io_debug.h"
 
 #include "nano/io.h"
+#include "nano/io_log.h"
 
 #define MAX_ATEXIT_HANDLERS (10)
 
@@ -38,7 +38,7 @@ void io_atexit(io_atexit_fn *fn, void *self)
 	if (ae_len < MAX_ATEXIT_HANDLERS) {
 		at_exits[ae_len++] = (struct at_exit_cb){ fn, self };
 	} else
-		syslog(LOG_ERR, "%s queue full", __FUNCTION__);
+		io_err("%s queue full", __FUNCTION__);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -49,7 +49,7 @@ static void io_free()
 
 	io_timers_free();
 	io_ds_free();
-	closelog();
+	io_log_close();
 }
 
 char const *io_prog_name;
@@ -65,7 +65,7 @@ int main(int argc, char *argv[])
 	if (*io_prog_name == '/')
 		++io_prog_name;
 
-	openlog(io_prog_name, LOG_PERROR | LOG_PID, LOG_USER);
+	io_log_open(io_prog_name);
 
 	io_timers_init();
 	io_ds_init();
@@ -75,12 +75,12 @@ int main(int argc, char *argv[])
 	start(argc, argv);
 
 	if (getppid() == 1)
-		openlog(io_prog_name, LOG_PERROR | LOG_PID, LOG_DAEMON);
+		io_log_open(io_prog_name);
 
 	int ret;
 	do {
 		ret = io_ds_poll(io_get_timeout());
-	} while (ret > 0 || (ret < 0 && errno == EINTR));
+	} while (ret > 0 || (ret < 0 && errno == EINTR) || io_has_active_timers());
 
 	return 0;
 }

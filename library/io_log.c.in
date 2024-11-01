@@ -1,0 +1,109 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <ctype.h>
+#include <string.h>
+#include <errno.h>
+#include <sys/types.h>
+
+#include "nano/io.h"
+#include "nano/io_log.h"
+
+
+#cmakedefine USE_SYSLOG
+
+
+#ifndef USE_SYSLOG
+
+#define io_logf(fmt, ...) fprintf(stderr, fmt, __VA_ARGS__)
+
+#else
+
+#include <syslog.h>
+
+#endif
+
+/* ------------------------------------------------------------------------ */
+static char const *vstrf(char const *format, va_list ap)
+{
+	static char str[256];
+	vsnprintf(str, sizeof str, format, ap);
+	return str;
+}
+
+/* -------------------------------------------------------------------------- */
+void io_debug(char const *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+#ifdef USE_SYSLOG
+	vsyslog(LOG_DEBUG, fmt, ap);
+#else
+	io_logf("[%s] %s\n", io_prog_name, vstrf(fmt, ap));
+#endif
+	va_end(ap);
+}
+
+/* -------------------------------------------------------------------------- */
+void io_info(char const *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+#ifdef USE_SYSLOG
+	vsyslog(LOG_INFO, fmt, ap);
+#else
+	io_logf("[%s] %s\n", io_prog_name, vstrf(fmt, ap));
+#endif
+	va_end(ap);
+}
+
+/* -------------------------------------------------------------------------- */
+void io_warn(char const *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+#ifdef USE_SYSLOG
+	vsyslog(LOG_WARNING, fmt, ap);
+#else
+	io_logf("[%s] %s\n", io_prog_name, vstrf(fmt, ap));
+#endif
+	va_end(ap);
+}
+
+/* -------------------------------------------------------------------------- */
+void io_err(char const *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+#ifdef USE_SYSLOG
+	syslog(LOG_ERR, "%s : ERR %s", vstrf(fmt, ap), strerror(errno));
+#else
+	io_logf("[%s] %s : ERR %s\n", io_prog_name, vstrf(fmt, ap), strerror(errno));
+#endif
+	va_end(ap);
+}
+
+/* -------------------------------------------------------------------------- */
+void io_fail(char const *fmt, ...)
+{
+	va_list ap;
+	va_start(ap, fmt);
+#ifdef USE_SYSLOG
+	syslog(LOG_CRIT, "%s : FAIL %s", vstrf(fmt, ap), strerror(errno));
+#else
+	io_logf("[%s] %s : FAIL %s\n", io_prog_name, vstrf(fmt, ap), strerror(errno));
+#endif
+	va_end(ap);
+	exit(1);
+}
+
+/* -------------------------------------------------------------------------- */
+void io_log_open(char const *prog)
+{
+#ifdef USE_SYSLOG
+	syslog_open(io_prog_name, LOG_PERROR | LOG_PID, getppid() == 1 ? LOG_DAEMON : LOG_USER);
+#endif
+}

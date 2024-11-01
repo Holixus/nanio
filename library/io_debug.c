@@ -7,6 +7,7 @@
 #include <fcntl.h>
 
 #include "nano/io.h"
+#include "nano/io_log.h"
 #include "nano/io_debug.h"
 
 
@@ -26,7 +27,7 @@ void trace(char const *fmt, ...)
 	int fd = open(io_trace_file, O_APPEND|O_CREAT|O_WRONLY, 0666);
 	char msg[256];
 	if (write(fd, msg, (size_t)vsnprintf(msg, sizeof msg, fmt, ap)) < 0)
-		perror("io_trace: %m");
+		io_err("io_trace");
 	close(fd);
 	va_end(ap);
 }

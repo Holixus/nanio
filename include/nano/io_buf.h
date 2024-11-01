@@ -20,7 +20,7 @@ struct io_buf {
 
 
 /* ------------------------------------------------------------------------ */
-io_seg_t *io_seg_new();
+io_seg_t *io_seg_new(void);
 
 void io_buf_init(io_buf_t *b);
 void io_buf_add (io_buf_t *b, io_seg_t *s);
@@ -28,6 +28,8 @@ void io_buf_free(io_buf_t *b);
 
 int io_buf_send(io_buf_t *b, int sd);
 int io_buf_recv(io_buf_t *b, int sd);
+
+int io_buf_length(io_buf_t *b);
 
 static inline int io_buf_is_empty(io_buf_t *b) { return !b->first; }
 
